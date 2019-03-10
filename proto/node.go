@@ -64,35 +64,6 @@ func (n *Node) NodeTcpUp() {
 	}
 }
 
-/* starts listening for UDP packets on its IP addr (UDP for gossip exchange) */
-func (n *Node) NodeUdpUp() {
-	pkc, err := net.ListenPacket("udp", udpString(n.ip))
-	if err != nil {
-		n.logError("Cannot listen for UDP packets", log.Fields{
-			"error": err,
-		})
-	}
-
-	defer pkc.Close()
-	n.logInfo("Listening for UDP packets on " + udpString(n.ip), log.Fields{})
-
-	buffer := make([]byte, 1024)
-	for {
-		_, remoteAddr, err := pkc.ReadFrom(buffer)
-		if err != nil {
-			n.logError("Error accepting UDP packet: " + err.Error(), log.Fields{})
-			continue
-		}
-		n.logInfo("received UDP packet", log.Fields{
-			"remote": remoteAddr,
-			"message": string(buffer),
-		})
-
-		//go n.handleGossip
-	}
-
-}
-
 //TODO: modify so that a connection, rather than a request, is handled - a for loop?
 func (n *Node) handleClientConnection(conn net.Conn) {
 	n.logInfo("Received client request", log.Fields{})
@@ -122,12 +93,52 @@ func (n *Node) handleClientConnection(conn net.Conn) {
 		subsetInfo.IncreaseConfidence(res)
 	}
 	peerMajority, confidence := subsetInfo.GetKeyWithMostConfidence()
-	n.logInfo("Sampled peer subset", log.Fields{
-		"majority": peerMajority,
+	n.logInfo("finished sampling peer subset", log.Fields{
+		//"majority": peerMajority,
 		"votes": confidence,
 	})
 
 	n.store.IncreaseConfidence(peerMajority)
+	n.updateValue()
+}
+
+/* starts listening for UDP packets on its IP addr (UDP for gossip exchange) */
+func (n *Node) NodeUdpUp() {
+	pkc, err := net.ListenPacket("udp", udpString(n.ip))
+	if err != nil {
+		n.logError("Cannot listen for UDP packets", log.Fields{
+			"error": err,
+		})
+	}
+
+	defer pkc.Close()
+	n.logInfo("Listening for UDP packets on " + udpString(n.ip), log.Fields{})
+
+	buffer := make([]byte, 1024)
+	for {
+		bytesRead, remoteAddr, err := pkc.ReadFrom(buffer)
+		if err != nil {
+			n.logError("Error accepting UDP packet: " + err.Error(), log.Fields{})
+			continue
+		}
+		msg := string(buffer[:bytesRead])
+		n.logInfo("received UDP packet", log.Fields{
+			"remote": remoteAddr,
+			"message": msg,
+		})
+
+		if msg == GOSSIP_REQUEST {
+			go n.handleGossipReq(remoteAddr, pkc) //send node's value
+		}
+
+	}
+}
+
+func (n *Node) handleGossipReq(remoteAddr net.Addr, pkc net.PacketConn) {
+	pkc.WriteTo([]byte(n.value), remoteAddr)
+	n.logInfo("sent gossip response", log.Fields{
+		"remote": remoteAddr,
+	})
 }
 
 /* Obtain a peer's value using UDP protocol */
@@ -143,11 +154,9 @@ func (n *Node) fetchPeerInfo(peerIp string) StoreKey {
 	conn.Write([]byte(GOSSIP_REQUEST))
 
 	buffer := make([]byte, 1024)
-	conn.Read(buffer)
+	bytesRead, err := conn.Read(buffer)
 
-	fmt.Println("received", buffer)
-
-	return StoreKey(buffer)
+	return StoreKey(buffer[:bytesRead])
 }
 
 func (n *Node) sendData(msg interface{}, conn net.Conn) error {
@@ -232,7 +241,7 @@ func (n *Node) choosePeerSubset() []string {
 func (n *Node) updateValue() {
 	newValue, confidence := n.store.GetKeyWithMostConfidence()
 	n.value = newValue
-	n.logInfo("Updated value", log.Fields{
+	n.logInfo("updated value", log.Fields{
 		"value": newValue,
 		"confidence": confidence,
 	})
