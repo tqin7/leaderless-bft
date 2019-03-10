@@ -35,27 +35,65 @@ func CreateNode(ip string) *Node {
 	return newNode
 }
 
-/* starts listening on its IP addr */
 func (n *Node) NodeUp() {
-	l, err := net.Listen(CONN_TYPE, n.ip + ":" + CONN_PORT)
+	go n.NodeTcpUp()
+	n.NodeUdpUp()
+}
+
+/* starts listening for TCP connections on its IP addr (TCP for client requests) */
+func (n *Node) NodeTcpUp() {
+	l, err := net.Listen(CONN_TYPE, tcpString(n.ip))
 	if err != nil {
 		n.logError("Error listening: " + err.Error(), log.Fields{})
 		return
 	}
 
 	defer l.Close()
-	n.logInfo("Listening on " + n.ip + ":" + CONN_PORT, log.Fields{})
+	n.logInfo("Listening for TCP connections on " + tcpString(n.ip), log.Fields{})
+
 	for {
 		conn, err := l.Accept()
 		if err != nil {
-			n.logError("Error accepting connection: " + err.Error(), log.Fields{})
-			return
+			n.logError("Error accepting TCP connection: " + err.Error(), log.Fields{})
+			continue
 		}
-
+		n.logInfo("accepted TCP connection", log.Fields{
+			"remote": conn.RemoteAddr(),
+		})
 		go n.handleClientConnection(conn)
 	}
 }
 
+/* starts listening for UDP packets on its IP addr (UDP for gossip exchange) */
+func (n *Node) NodeUdpUp() {
+	pkc, err := net.ListenPacket("udp", udpString(n.ip))
+	if err != nil {
+		n.logError("Cannot listen for UDP packets", log.Fields{
+			"error": err,
+		})
+	}
+
+	defer pkc.Close()
+	n.logInfo("Listening for UDP packets on " + udpString(n.ip), log.Fields{})
+
+	buffer := make([]byte, 1024)
+	for {
+		_, remoteAddr, err := pkc.ReadFrom(buffer)
+		if err != nil {
+			n.logError("Error accepting UDP packet: " + err.Error(), log.Fields{})
+			continue
+		}
+		n.logInfo("received UDP packet", log.Fields{
+			"remote": remoteAddr,
+			"message": string(buffer),
+		})
+
+		//go n.handleGossip
+	}
+
+}
+
+//TODO: modify so that a connection, rather than a request, is handled - a for loop?
 func (n *Node) handleClientConnection(conn net.Conn) {
 	n.logInfo("Received client request", log.Fields{})
 
@@ -75,12 +113,41 @@ func (n *Node) handleClientConnection(conn net.Conn) {
 	fmt.Fprintf(conn, "node's value is " + string(n.value))
 
 	peerSubset := n.choosePeerSubset()
+	subsetInfo := CreateNodeKVMap()
+	n.logInfo("start peer sampling process", log.Fields{
+		"sample": peerSubset,
+	})
 	for _, peerIp := range peerSubset {
-		//TODO: use UDP to ask each peer for their value and update confidence
+		res := n.fetchPeerInfo(peerIp)  //TODO: use Goroutines here and use channel to gather info
+		subsetInfo.IncreaseConfidence(res)
 	}
+	peerMajority, confidence := subsetInfo.GetKeyWithMostConfidence()
+	n.logInfo("Sampled peer subset", log.Fields{
+		"majority": peerMajority,
+		"votes": confidence,
+	})
 
+	n.store.IncreaseConfidence(peerMajority)
+}
 
-	//n.store.IncreaseConfidence()
+/* Obtain a peer's value using UDP protocol */
+func (n *Node) fetchPeerInfo(peerIp string) StoreKey {
+	conn, err := net.Dial("udp", udpString(peerIp))
+	if err != nil {
+		n.logError("Could not send UDP packet to peer: " + err.Error(), log.Fields{
+			"peer": peerIp,
+		})
+	}
+	defer conn.Close()
+
+	conn.Write([]byte(GOSSIP_REQUEST))
+
+	buffer := make([]byte, 1024)
+	conn.Read(buffer)
+
+	fmt.Println("received", buffer)
+
+	return StoreKey(buffer)
 }
 
 func (n *Node) sendData(msg interface{}, conn net.Conn) error {
@@ -169,6 +236,14 @@ func (n *Node) updateValue() {
 		"value": newValue,
 		"confidence": confidence,
 	})
+}
+
+func tcpString(ip string) string {
+	return ip + ":" + CONN_TCP_PORT
+}
+
+func udpString(ip string) string {
+	return ip + ":" + CONN_UDP_PORT
 }
 
 func (n *Node) logInfo(msg string, fields log.Fields) {
