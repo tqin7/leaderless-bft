@@ -81,7 +81,7 @@ func (n *Node) handleClientConnection(conn net.Conn) {
 		n.logInfo("Initialized value to " + clientMsg, log.Fields{})
 	}
 
-	fmt.Fprintf(conn, "node's value is " + string(n.value))
+	//fmt.Fprintf(conn, "node's value is " + string(n.value))
 
 	peerSubset := n.choosePeerSubset()
 	subsetInfo := CreateNodeKVMap()
@@ -118,23 +118,37 @@ func (n *Node) NodeUdpUp() {
 	for {
 		bytesRead, remoteAddr, err := pkc.ReadFrom(buffer)
 		if err != nil {
-			n.logError("Error accepting UDP packet: " + err.Error(), log.Fields{})
+			n.logError("Error reading UDP packet: " + err.Error(), log.Fields{})
 			continue
 		}
-		msg := string(buffer[:bytesRead])
+
+		var msg Message
+		err = json.Unmarshal(buffer[:bytesRead], &msg)
+		if err != nil {
+			n.logError("failed to unmarshal message", log.Fields{
+				"remote": remoteAddr,
+			})
+			continue
+		}
 		n.logInfo("received UDP packet", log.Fields{
 			"remote": remoteAddr,
 			"message": msg,
 		})
 
-		if msg == GOSSIP_REQUEST {
-			go n.handleGossipReq(remoteAddr, pkc) //send node's value
+		if msg.Purpose == GOSSIP_REQUEST {
+			go n.handleGossipReq(msg.Value, remoteAddr, pkc) //send node's value
 		}
 
 	}
 }
 
-func (n *Node) handleGossipReq(remoteAddr net.Addr, pkc net.PacketConn) {
+func (n *Node) handleGossipReq(v StoreKey, remoteAddr net.Addr, pkc net.PacketConn) {
+	if n.value == "" {
+		n.value = v
+		n.logInfo("initialized value upon receiving query", log.Fields{
+			"value": v,
+		})
+	}
 	pkc.WriteTo([]byte(n.value), remoteAddr)
 	n.logInfo("sent gossip response", log.Fields{
 		"remote": remoteAddr,
@@ -145,13 +159,22 @@ func (n *Node) handleGossipReq(remoteAddr net.Addr, pkc net.PacketConn) {
 func (n *Node) fetchPeerInfo(peerIp string) StoreKey {
 	conn, err := net.Dial("udp", udpString(peerIp))
 	if err != nil {
-		n.logError("Could not send UDP packet to peer: " + err.Error(), log.Fields{
+		n.logError("failed in UDP dialing: " + err.Error(), log.Fields{
 			"peer": peerIp,
 		})
 	}
 	defer conn.Close()
 
-	conn.Write([]byte(GOSSIP_REQUEST))
+	m := Message{Purpose: GOSSIP_REQUEST, Value: n.value}
+	mBytes, err := json.Marshal(m)
+	if err != nil {
+		n.logError("failed to marshal Message", log.Fields{
+			"message": m,
+		})
+		return "" //if failed, is empty string correct to return?
+	}
+
+	conn.Write(mBytes)
 
 	buffer := make([]byte, 1024)
 	bytesRead, err := conn.Read(buffer)
@@ -241,6 +264,8 @@ func (n *Node) choosePeerSubset() []string {
 func (n *Node) updateValue() {
 	newValue, confidence := n.store.GetKeyWithMostConfidence()
 	n.value = newValue
+	fmt.Println(newValue)
+	fmt.Println("red")
 	n.logInfo("updated value", log.Fields{
 		"value": newValue,
 		"confidence": confidence,

@@ -1,5 +1,6 @@
 package proto
 
 type Message struct {
-	value StoreKey
+	Purpose string
+	Value StoreKey
 }
