@@ -22,6 +22,9 @@ type Node struct {
 
 	store NodeKVMap // maps each proposal to confidence value
 	value StoreKey
+
+	hashes map[string]bool
+	requests []string
 }
 
 func CreateNode(ip string) *Node {
@@ -64,44 +67,6 @@ func (n *Node) NodeTcpUp() {
 	}
 }
 
-//TODO: modify so that a connection, rather than a request, is handled - a for loop?
-func (n *Node) handleClientConnection(conn net.Conn) {
-	n.logInfo("Received client request", log.Fields{})
-
-	//var req Message
-	//n.rcvData(&req, conn)
-	//n.logInfo("Parsed client request message", log.Fields{
-	//	"message": req.value,
-	//})
-
-	clientMsg, _ := bufio.NewReader(conn).ReadString('\n')
-
-	if n.value == "" {
-		n.value = StoreKey(clientMsg)
-		n.logInfo("Initialized value to " + clientMsg, log.Fields{})
-	}
-
-	//fmt.Fprintf(conn, "node's value is " + string(n.value))
-
-	peerSubset := n.choosePeerSubset()
-	subsetInfo := CreateNodeKVMap()
-	n.logInfo("start peer sampling process", log.Fields{
-		"sample": peerSubset,
-	})
-	for _, peerIp := range peerSubset {
-		res := n.fetchPeerInfo(peerIp)  //TODO: use Goroutines here and use channel to gather info
-		subsetInfo.IncreaseConfidence(res)
-	}
-	peerMajority, confidence := subsetInfo.GetKeyWithMostConfidence()
-	n.logInfo("finished sampling peer subset", log.Fields{
-		//"majority": peerMajority,
-		"votes": confidence,
-	})
-
-	n.store.IncreaseConfidence(peerMajority)
-	n.updateValue()
-}
-
 /* starts listening for UDP packets on its IP addr (UDP for gossip exchange) */
 func (n *Node) NodeUdpUp() {
 	pkc, err := net.ListenPacket("udp", udpString(n.ip))
@@ -142,6 +107,21 @@ func (n *Node) NodeUdpUp() {
 	}
 }
 
+//TODO: modify so that a connection, rather than a request, is handled - a for loop?
+func (n *Node) handleClientConnection(conn net.Conn) {
+	n.logInfo("Received client request", log.Fields{})
+
+	clientMsg, _ := bufio.NewReader(conn).ReadString('\n')
+
+	if n.value == "" {
+		n.value = StoreKey(clientMsg)
+		n.logInfo("Initialized value to " + clientMsg, log.Fields{})
+	}
+
+
+
+}
+
 func (n *Node) handleGossipReq(v StoreKey, remoteAddr net.Addr, pkc net.PacketConn) {
 	if n.value == "" {
 		n.value = v
@@ -153,6 +133,28 @@ func (n *Node) handleGossipReq(v StoreKey, remoteAddr net.Addr, pkc net.PacketCo
 	n.logInfo("sent gossip response", log.Fields{
 		"remote": remoteAddr,
 	})
+}
+
+func (n *Node) samplePeers() {
+	//fmt.Fprintf(conn, "node's value is " + string(n.value))
+
+	peerSubset := n.choosePeerSubset()
+	subsetInfo := CreateNodeKVMap()
+	n.logInfo("start peer sampling process", log.Fields{
+		"sample": peerSubset,
+	})
+	for _, peerIp := range peerSubset {
+		res := n.fetchPeerInfo(peerIp)  //TODO: use Goroutines here and use channel to gather info
+		subsetInfo.IncreaseConfidence(res)
+	}
+	peerMajority, confidence := subsetInfo.GetKeyWithMostConfidence()
+	n.logInfo("finished sampling peer subset", log.Fields{
+		//"majority": peerMajority,
+		"votes": confidence,
+	})
+
+	n.store.IncreaseConfidence(peerMajority)
+	n.updateValue()
 }
 
 /* Obtain a peer's value using UDP protocol */

@@ -1,0 +1,8 @@
+service Gossip {
+    rpc Poke (string) returns (bool) {}
+    rpc Push (string) returns (Empty) {}
+}
+
+message Empty {
+
+}
