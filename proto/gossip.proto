@@ -1,8 +1,27 @@
+syntax = "proto3";
+
 service Gossip {
-    rpc Poke (string) returns (bool) {}
-    rpc Push (string) returns (Empty) {}
+    //checks whether hash already exists
+    rpc Poke (ReqId) returns (Bool) {}
+    //sends new info
+    rpc Push (ReqInfo) returns (Void) {}
 }
 
-message Empty {
-
+message ReqInfo {
+    ReqId id = 1;
+    ReqBody body = 2;
 }
+
+message ReqId {
+    bytes hash = 1;
+}
+
+message ReqBody {
+    bytes body = 1;
+}
+
+message Bool {
+    bool status = 1;
+}
+
+message Void {}
