@@ -10,9 +10,6 @@ import (
 	"crypto/sha256"
 	"net"
 	"google.golang.org/grpc"
-	"math/rand"
-	"fmt"
-	"time"
 )
 
 // Structure of each gossiper
@@ -22,28 +19,23 @@ type Gossiper struct {
 	peers []string // known peers
 	peersLock sync.Mutex
 
-	hashes map[string]bool
-
-	requests []string
-	requestsLock sync.Mutex
+	hashes map[string]bool // hash of requests known
+	requests []string // known requests
 }
 
 func (g *Gossiper) Poke(ctx context.Context, reqId *pb.ReqId) (*pb.Bool, error) {
-	fmt.Println("poke request received")
 	_, exists := g.hashes[string(reqId.Hash)]
 
 	log.WithFields(log.Fields{
 		"ip": g.ip,
-		"exists?": exists,
+		"exists": exists,
 	}).Info("got poked")
 
 	return &pb.Bool{Status: exists}, nil
 }
 
 func (g *Gossiper) Push(ctx context.Context, reqBody *pb.ReqBody) (*pb.Void, error) {
-	g.requestsLock.Lock()
 	g.requests = append(g.requests, string(reqBody.Body))
-	g.requestsLock.Unlock()
 
 	reqHash := hashBytes(reqBody.Body)
 	g.hashes[string(reqHash)] = true
@@ -53,33 +45,19 @@ func (g *Gossiper) Push(ctx context.Context, reqBody *pb.ReqBody) (*pb.Void, err
 		"request": string(reqBody.Body),
 	}).Info("stored new request")
 
+	for _, peerIp := range g.peers {
+		g.sendGossip(peerIp, reqBody.Body)
+	}
+
 	return &pb.Void{}, nil
 }
 
-func (g *Gossiper) StartGossip() {
-	log.WithField("ip", g.ip).Info("Start to gossip")
-	gossipTicker := time.NewTicker(5 * time.Second)
-	for {
-		select {
-		case <-gossipTicker.C:
-			g.RandomGossip()
-		}
-	}
-}
-
-func (g *Gossiper) RandomGossip() {
-	//share request with one random neighbor
-	randomNeighbor := g.selectRandomPeer()
-	randomRequest := g.selectRandomRequest()
-	if randomNeighbor == "" || randomRequest == nil {
-		return
-	}
-
-	conn, err := grpc.Dial(tcpString(randomNeighbor), grpc.WithInsecure()) // this should be unreliable
+func (g *Gossiper) sendGossip(neighborIp string, request []byte) {
+	conn, err := grpc.Dial(tcpString(neighborIp), grpc.WithInsecure())
 	if err != nil {
 		log.WithFields(log.Fields{
 			"ip": g.ip,
-			"peer": randomNeighbor,
+			"peer": neighborIp,
 		}).Error("Cannot dial peer\n")
 		return
 	}
@@ -87,49 +65,30 @@ func (g *Gossiper) RandomGossip() {
 
 	client := pb.NewGossipClient(conn)
 
-
-	randomReqHash := hashBytes(randomRequest)
-	exists, err := client.Poke(context.Background(), &pb.ReqId{Hash: randomReqHash})
+	reqHash := hashBytes(request)
+	exists, err := client.Poke(context.Background(), &pb.ReqId{Hash: reqHash})
 
 	if err != nil {
 		log.WithFields(log.Fields{
 			"ip": g.ip,
-			"peer": randomNeighbor,
+			"peer": neighborIp,
 			"error": err,
 		}).Info("failed to poke peer\n")
 	} else {
 		log.WithFields(log.Fields{
 			"ip": g.ip,
-			"peer": randomNeighbor,
+			"peer": neighborIp,
 			"exists": exists.Status,
 		}).Info("poked peer\n")
 		if !exists.Status { // if peer doesn't have this hash
-			client.Push(context.Background(), &pb.ReqBody{Body: randomRequest})
 			log.WithFields(log.Fields{
 				"ip": g.ip,
-				"peer": randomNeighbor,
-				"request": randomRequest,
-			}).Info("pushed request to peer\n")
+				"peer": neighborIp,
+				"request": string(request),
+			}).Info("push request to peer\n")
+			client.Push(context.Background(), &pb.ReqBody{Body: request})
 		}
 	}
-}
-
-func (g *Gossiper) selectRandomPeer() string {
-	g.peersLock.Lock()
-	defer g.peersLock.Unlock()
-	if len(g.peers) == 0 {
-		return ""
-	}
-	return g.peers[rand.Intn(len(g.peers))]
-}
-
-func (g *Gossiper) selectRandomRequest() []byte {
-	g.requestsLock.Lock()
-	defer g.requestsLock.Unlock()
-	if len(g.requests) == 0 {
-		return nil
-	}
-	return []byte(g.requests[rand.Intn(len(g.requests))])
 }
 
 func (g *Gossiper) AddPeer(peerIp string) {
@@ -162,7 +121,7 @@ func CreateGossiper(ip string) *Gossiper {
 }
 
 func GossiperUp(g *Gossiper) {
-	lis, err := net.Listen("udp", tcpString(g.ip))
+	lis, err := net.Listen("tcp", tcpString(g.ip))
 	if err != nil {
 		log.WithField("ip", g.ip).Error("Cannot listen on tcp")
 	}
