@@ -5,12 +5,21 @@ import (
 	"bufio"
 	"os"
 	"fmt"
+	"google.golang.org/grpc"
+	"context"
+	log "github.com/sirupsen/logrus"
+	pb "github.com/spockqin/leaderless-bft/proto"
 )
 
 func main() {
 
-	nodeIp := "127.0.0.2:7777"
-	conn, _ := net.Dial("tcp", nodeIp)
+	gossiperIp := "127.0.0.2:7777"
+	conn, err := grpc.Dial(gossiperIp)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"node": gossiperIp,
+		}).Error("Cannot dial node")
+	}
 	defer conn.Close()
 
 	for {
@@ -19,13 +28,11 @@ func main() {
 		fmt.Print("Message to send: ")
 		msg, _ := reader.ReadString('\n')
 
-		//m := proto.Message{proto.StoreKey(msg)}
-		//b, err := json.Marshal(m)
-
 		// send message to node
-		fmt.Fprintf(conn, msg + "\n")
-		// listen for reply
-		message, _ := bufio.NewReader(conn).ReadString('\n')
-		fmt.Print("Message from server: " + message)
+		client := pb.NewGossipClient(conn)
+		client.Push(context.Background(), &pb.ReqBody{Body: msg})
+		//// listen for reply
+		//message, _ := bufio.NewReader(conn).ReadString('\n')
+		//fmt.Print("Message from server: " + message)
 	}
 }

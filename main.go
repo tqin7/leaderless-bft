@@ -2,8 +2,8 @@ package main
 
 import (
 	"flag"
-	. "github.com/spockqin/leaderless-bft/proto"
 	"strings"
+	. "github.com/spockqin/leaderless-bft/node"
 )
 
 func main() {
@@ -15,12 +15,12 @@ func main() {
 
 	flag.Parse()
 
-	node := CreateNode(ipAddr)
+	gossiper := CreateGossiper(ipAddr)
 	peers := strings.Split(peersStr, ",")
 
 	for _, peer := range peers {
-		node.AddPeer(peer)
+		gossiper.AddPeer(peer)
 	}
 
-	node.NodeUp()
+	GossiperUp(gossiper)
 }
