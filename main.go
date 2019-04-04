@@ -22,5 +22,6 @@ func main() {
 		gossiper.AddPeer(peer)
 	}
 
-	GossiperUp(gossiper)
+	go GossiperUp(gossiper)
+	gossiper.StartGossip()
 }

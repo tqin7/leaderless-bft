@@ -1,7 +1,6 @@
 package main
 
 import (
-	"net"
 	"bufio"
 	"os"
 	"fmt"
@@ -14,10 +13,11 @@ import (
 func main() {
 
 	gossiperIp := "127.0.0.2:7777"
-	conn, err := grpc.Dial(gossiperIp)
+	conn, err := grpc.Dial(gossiperIp, grpc.WithInsecure())
 	if err != nil {
 		log.WithFields(log.Fields{
 			"node": gossiperIp,
+			"error": err,
 		}).Error("Cannot dial node")
 	}
 	defer conn.Close()
@@ -26,11 +26,15 @@ func main() {
 		// read in input from stdin
 		reader := bufio.NewReader(os.Stdin)
 		fmt.Print("Message to send: ")
-		msg, _ := reader.ReadString('\n')
+		msg, _ := reader.ReadBytes('\n')
 
 		// send message to node
 		client := pb.NewGossipClient(conn)
+		//exists, _ := client.Poke(context.Background(), &pb.ReqId{Hash: msg})
+		//fmt.Println(exists.Status)
 		client.Push(context.Background(), &pb.ReqBody{Body: msg})
+
+
 		//// listen for reply
 		//message, _ := bufio.NewReader(conn).ReadString('\n')
 		//fmt.Print("Message from server: " + message)
