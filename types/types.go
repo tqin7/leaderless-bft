@@ -1,8 +1,7 @@
 package types
 
 const (
-	GOSSIP_SUBSET_SIZE = 1
-	GOSSIP_REQUEST = "gspreq"
+	SNOWBALL_SUBSET_SIZE = 1
 )
 
 const (
