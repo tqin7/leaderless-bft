@@ -35,6 +35,7 @@ func (g *Gossiper) Poke(ctx context.Context, reqId *pb.ReqId) (*pb.Bool, error) 
 }
 
 func (g *Gossiper) Push(ctx context.Context, reqBody *pb.ReqBody) (*pb.Void, error) {
+
 	g.requests = append(g.requests, string(reqBody.Body))
 
 	reqHash := hashBytes(reqBody.Body)
@@ -50,6 +51,14 @@ func (g *Gossiper) Push(ctx context.Context, reqBody *pb.ReqBody) (*pb.Void, err
 	}
 
 	return &pb.Void{}, nil
+}
+
+func (g *Gossiper) GetAllRequests(ctx context.Context, void *pb.Void) (*pb.Requests, error) {
+	log.WithFields(log.Fields{
+		"ip": g.ip,
+		"requests": g.requests,
+	}).Info("print all known requests")
+	return &pb.Requests{Requests: g.requests}, nil
 }
 
 func (g *Gossiper) sendGossip(neighborIp string, request []byte) {

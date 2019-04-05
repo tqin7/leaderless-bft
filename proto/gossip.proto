@@ -5,6 +5,13 @@ service Gossip {
     rpc Poke (ReqId) returns (Bool) {}
     //sends new info
     rpc Push (ReqBody) returns (Void) {}
+
+    //gets requests
+    rpc GetAllRequests (Void) returns (Requests) {}
+}
+
+message Requests {
+    repeated string requests = 1;
 }
 
 message ReqId {
