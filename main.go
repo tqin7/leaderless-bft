@@ -19,7 +19,8 @@ type Node struct {
 }
 
 func main() {
-	nodesJson, err := os.Open("./tests/network/config.json")
+	// nodesJson, err := os.Open("./tests/network/config.json")
+	nodesJson, err := os.Open("./config.json")
 	if err != nil {
 		fmt.Println("Cannot read network configuration file")
 		return

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # creates aliases of the loopback interface for testing purposes
-numOfNodes=14
+numOfNodes=100
 start=2
 end=$(( start + numOfNodes ))
 
