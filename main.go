@@ -20,7 +20,7 @@ type Node struct {
 
 func main() {
 	// nodesJson, err := os.Open("./tests/network/config.json")
-	nodesJson, err := os.Open("./config.json")
+	nodesJson, err := os.Open("./tests/network/config.json")
 	if err != nil {
 		fmt.Println("Cannot read network configuration file")
 		return
@@ -32,8 +32,14 @@ func main() {
 	var nodes Nodes
 	json.Unmarshal(byteValue, &nodes)
 
+	var allIps []string
+	for _, node := range nodes.Nodes {
+		allIps = append(allIps, node.Ip)
+	}
+
 	for i, node := range nodes.Nodes {
 		gossiper := proto.CreateGossiper(node.Ip)
+		//gossiper := proto.CreateGossiper(node.Ip, allIps)
 		peers := strings.Split(node.Peers, ",")
 		for _, peer := range peers {
 			gossiper.AddPeer(peer)
@@ -47,6 +53,7 @@ func main() {
 	}
 
 
+	// COMMAND LINE FLAG
 	//var ipAddr string
 	//var peersStr string
 	//

@@ -6,8 +6,7 @@ import (
 	pb "github.com/spockqin/leaderless-bft/proto"
 	. "github.com/spockqin/leaderless-bft/types"
 	log "github.com/sirupsen/logrus"
-	. "github.com/spockqin/leaderless-bft/util"
-	"crypto/sha256"
+	"github.com/spockqin/leaderless-bft/util"
 	"net"
 	"google.golang.org/grpc"
 )
@@ -21,6 +20,7 @@ type Gossiper struct {
 
 	hashes map[string]bool // hash of requests known
 	requests []string // known requests
+	requestsLock sync.Mutex
 }
 
 func (g *Gossiper) Poke(ctx context.Context, reqId *pb.ReqId) (*pb.Bool, error) {
@@ -35,10 +35,11 @@ func (g *Gossiper) Poke(ctx context.Context, reqId *pb.ReqId) (*pb.Bool, error) 
 }
 
 func (g *Gossiper) Push(ctx context.Context, reqBody *pb.ReqBody) (*pb.Void, error) {
-
+	g.requestsLock.Lock()
 	g.requests = append(g.requests, string(reqBody.Body))
+	g.requestsLock.Unlock()
 
-	reqHash := hashBytes(reqBody.Body)
+	reqHash := util.HashBytes(reqBody.Body)
 	g.hashes[string(reqHash)] = true
 
 	log.WithFields(log.Fields{
@@ -54,6 +55,9 @@ func (g *Gossiper) Push(ctx context.Context, reqBody *pb.ReqBody) (*pb.Void, err
 }
 
 func (g *Gossiper) GetAllRequests(ctx context.Context, void *pb.Void) (*pb.Requests, error) {
+	g.requestsLock.Lock()
+	defer g.requestsLock.Unlock()
+
 	log.WithFields(log.Fields{
 		"ip": g.ip,
 		"requests": g.requests,
@@ -67,6 +71,7 @@ func (g *Gossiper) sendGossip(neighborIp string, request []byte) {
 		log.WithFields(log.Fields{
 			"ip": g.ip,
 			"peer": neighborIp,
+			"error": err,
 		}).Error("Cannot dial peer\n")
 		return
 	}
@@ -74,7 +79,7 @@ func (g *Gossiper) sendGossip(neighborIp string, request []byte) {
 
 	client := pb.NewGossipClient(conn)
 
-	reqHash := hashBytes(request)
+	reqHash := util.HashBytes(request)
 	exists, err := client.Poke(context.Background(), &pb.ReqId{Hash: reqHash})
 
 	if err != nil {
@@ -104,7 +109,7 @@ func (g *Gossiper) AddPeer(peerIp string) {
 	g.peersLock.Lock()
 	defer g.peersLock.Unlock()
 
-	if StringInArray(peerIp, g.peers) {
+	if util.StringInArray(peerIp, g.peers) {
 		log.WithFields(log.Fields{
 			"ip": g.ip,
 			"peer": peerIp,
@@ -144,10 +149,4 @@ func GossiperUp(g *Gossiper) {
 
 func tcpString(ip string) string {
 	return ip + ":" + CONN_TCP_PORT
-}
-
-func hashBytes(bytes []byte) []byte {
-	h := sha256.New()
-	h.Write(bytes)
-	return h.Sum(nil)
 }

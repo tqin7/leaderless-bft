@@ -1,7 +1,7 @@
 package types
 
 const (
-	SNOWBALL_SUBSET_SIZE = 1
+	SNOWBALL_SAMPLE_ROUNDS = 15
 )
 
 const (

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-numOfNodes=100
+numOfNodes=3
 maxNeighborSize=$((numOfNodes / 2))
-start=2 #start IP is 127.0.0.start
+start=2 #start IP is 127.0.0.$start
 end=$(( start + numOfNodes ))
 
 ips=()

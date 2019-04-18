@@ -10,6 +10,13 @@ service Gossip {
     rpc GetAllRequests (Void) returns (Requests) {}
 }
 
+service Snowball {
+    //gets a vote on this server's opinion
+    rpc GetVote (Void) returns (ReqId) {}
+    //a client sends request using this method
+    rpc SendReq (ReqBody) returns (Void) {}
+}
+
 message Requests {
     repeated string requests = 1;
 }

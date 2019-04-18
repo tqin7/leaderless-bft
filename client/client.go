@@ -23,7 +23,7 @@ func createGrpcConn(ip string) *grpc.ClientConn {
 
 func main() {
 
-	numOfNodes, start := 100, 2
+	numOfNodes, start := 3, 2
 
 	var gossipers []string
 	for i := start; i < start + numOfNodes; i++ {
