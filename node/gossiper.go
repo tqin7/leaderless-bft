@@ -48,7 +48,7 @@ func (g *Gossiper) Push(ctx context.Context, reqBody *pb.ReqBody) (*pb.Void, err
 	}).Info("stored new request")
 
 	for _, peerIp := range g.peers {
-		g.sendGossip(peerIp, reqBody.Body)
+		go g.sendGossip(peerIp, reqBody.Body)
 	}
 
 	return &pb.Void{}, nil

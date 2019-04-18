@@ -13,10 +13,18 @@ func CreateConfidenceMap() ConfidenceMap {
 	return m
 }
 
+func (m *ConfidenceMap) Get(k string) uint {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	return m.kvMap[k]
+}
+
 func (m *ConfidenceMap) RemoveKey(k string) {
 	m.lock.Lock()
+	defer m.lock.Unlock()
+
 	delete(m.kvMap, k)
-	m.lock.Unlock()
 }
 
 func (m *ConfidenceMap) IncreaseConfidence(k string) {

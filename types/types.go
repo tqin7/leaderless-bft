@@ -2,6 +2,7 @@ package types
 
 const (
 	SNOWBALL_SAMPLE_ROUNDS = 15
+	NO_PROPOSAL = ""
 )
 
 const (

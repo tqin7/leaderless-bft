@@ -9,13 +9,15 @@ import (
 	"google.golang.org/grpc"
 	log "github.com/sirupsen/logrus"
 	"github.com/spockqin/leaderless-bft/types"
+	. "github.com/spockqin/leaderless-bft/types"
 )
 
 type Snower struct {
 	Gossiper
-	allIps []string
-	confidences ConfidenceMap
-	ordered []string
+	allIps []string //ip of every node in the network
+	confidences ConfidenceMap //storing num of queries that yield each output
+	ordered []string //an ordered lists of requests, i.e. ones with consensus
+	proposal string //what's believed to be the next request
 }
 
 //return what this node thinks is the next request
@@ -28,23 +30,42 @@ func (s *Snower) GetVote(ctx context.Context, req *pb.Void) (*pb.ReqId, error) {
 		return &pb.ReqId{Hash:nil}, errors.New("no known request")
 	}
 
-	//select what this node believes is the next req. random for now
-	s.requestsLock.Lock()
-	randomReq := s.requests[rand.Intn(reqLen)]
-	s.requestsLock.Unlock()
+	//if s doesn't have a proposal yet, set proposal and initiate query
+	//otherwise, simply return proposal
+	if s.proposal == NO_PROPOSAL {
+		s.setProposal()
+		go s.performQueries()
+	}
 
-	reqHash := util.HashBytes([]byte(randomReq))
-	return &pb.ReqId{Hash:reqHash}, nil
+	proposalHash := util.HashBytes([]byte(s.proposal))
+	return &pb.ReqId{Hash:proposalHash}, nil
 }
 
 func (s *Snower) SendReq(ctx context.Context, req *pb.ReqBody) (*pb.Void, error) {
-	s.Push(ctx, req)
+	go s.Push(ctx, req)
 
+	go s.performQueries()
+
+	return &pb.Void{}, nil
+}
+
+func (s *Snower) setProposal() {
+	s.requestsLock.Lock()
+	defer s.requestsLock.Unlock()
+
+	s.proposal = s.requests[rand.Intn(len(s.requests))] //random request for now
+}
+
+func (s *Snower) performQueries() {
 	for i := 0; i < types.SNOWBALL_SAMPLE_ROUNDS; i++ {
 		s.getMajorityVote()
 	}
+	s.ordered = append(s.ordered, s.proposal)
+	s.confidences.RemoveKey(s.proposal)
+	s.proposal = NO_PROPOSAL
 }
 
+//queries random subset, get majority, update confidence and proposal
 func (s *Snower) getMajorityVote() string {
 	sampleSize := 3
 	networkSubset := util.UniqueRandomSample(s.allIps, sampleSize)
@@ -76,6 +97,9 @@ func (s *Snower) getMajorityVote() string {
 	winner, _ := votes.GetKeyWithMostConfidence()
 
 	s.confidences.IncreaseConfidence(winner)
+	if s.confidences.Get(winner) > s.confidences.Get(s.proposal) {
+		s.proposal = winner
+	}
 
 	log.WithFields(log.Fields{
 		"ip": s.ip,
@@ -95,6 +119,7 @@ func CreateSnower(ip string, allIps []string) *Snower {
 	newSnower.allIps = allIps
 	newSnower.confidences = CreateConfidenceMap()
 	newSnower.ordered = make([]string, 0)
+	newSnower.proposal = NO_PROPOSAL
 
 	return newSnower
 }

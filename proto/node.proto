@@ -15,6 +15,9 @@ service Snowball {
     rpc GetVote (Void) returns (ReqId) {}
     //a client sends request using this method
     rpc SendReq (ReqBody) returns (Void) {}
+
+    //gets ordered requests (consensus reached whp)
+    rpc GetOrderedReqs (Void) returns (Requests) {}
 }
 
 message Requests {
