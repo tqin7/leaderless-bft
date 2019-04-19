@@ -1,6 +1,6 @@
 #!/bin/bash
 
-numOfNodes=3
+numOfNodes=4
 start=2
 end=$(( start + numOfNodes ))
 

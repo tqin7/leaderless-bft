@@ -1,8 +1,8 @@
 package types
 
 const (
-	SNOWBALL_SAMPLE_ROUNDS = 15
-	NO_PROPOSAL = ""
+	SNOWBALL_SAMPLE_ROUNDS = 5
+	//NO_PROPOSAL =
 )
 
 const (

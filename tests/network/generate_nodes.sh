@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-numOfNodes=3
+numOfNodes=4
 maxNeighborSize=$((numOfNodes / 2))
 start=2 #start IP is 127.0.0.$start
 end=$(( start + numOfNodes ))
@@ -15,7 +15,7 @@ jsonStr=""
 for ((i=0; i<numOfNodes; i++)); do
     numNeighbors=$((1 + RANDOM % maxNeighborSize))
 
-    peerStr=""
+    peerStr="${ips[numOfNodes-1]}"
     if (("$i" > 0))
     then
         peerStr="${ips[i-1]}"

@@ -1,41 +1,14 @@
 package main
 
 import (
-	"os"
-	"fmt"
-	"io/ioutil"
-	"encoding/json"
 	"github.com/spockqin/leaderless-bft/node"
 	"strings"
+	. "github.com/spockqin/leaderless-bft/tests/network"
 )
 
-type Nodes struct {
-	Nodes []Node `json:"nodes"`
-}
-
-type Node struct {
-	Ip string `json:"ip"`
-	Peers string `json:"peers"`
-}
-
 func main() {
-	// nodesJson, err := os.Open("./tests/network/config.json")
-	nodesJson, err := os.Open("./tests/network/config.json")
-	if err != nil {
-		fmt.Println("Cannot read network configuration file")
-		return
-	}
-	defer nodesJson.Close()
-
-	byteValue, _ := ioutil.ReadAll(nodesJson)
-
 	var nodes Nodes
-	json.Unmarshal(byteValue, &nodes)
-
-	var allIps []string
-	for _, node := range nodes.Nodes {
-		allIps = append(allIps, node.Ip)
-	}
+	ReadNetworkConfig(&nodes, "./tests/network/config.json")
 
 	for i, node := range nodes.Nodes {
 		gossiper := proto.CreateGossiper(node.Ip)
@@ -46,12 +19,11 @@ func main() {
 		}
 
 		if i == len(nodes.Nodes) - 1 {
-			proto.GossiperUp(gossiper)
+			gossiper.GossiperUp()
 		} else {
-			go proto.GossiperUp(gossiper)
+			go gossiper.GossiperUp()
 		}
 	}
-
 
 	// COMMAND LINE FLAG
 	//var ipAddr string

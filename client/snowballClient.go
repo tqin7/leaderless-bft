@@ -10,38 +10,27 @@ import (
 	"context"
 )
 
-func createGrpcConn(ip string) *grpc.ClientConn {
-	conn, err := grpc.Dial(ip, grpc.WithInsecure())
-	if err != nil {
-		log.WithFields(log.Fields{
-			"node": ip,
-			"error": err,
-		}).Error("Cannot dial node")
-	}
-	return conn
-}
-
 func main() {
 
-	numOfNodes, start := 3, 2
+	numOfNodes, start := 4, 2
 
-	var gossipers []string
+	var snowers []string
 	for i := start; i < start + numOfNodes; i++ {
-		gossipers = append(gossipers, fmt.Sprintf("127.0.0.%d:7777", i))
+		snowers = append(snowers, fmt.Sprintf("127.0.0.%d:7777", i))
 	}
 
 	// create connection with main point of contact
-	mainIp := gossipers[0]
+	mainIp := snowers[0]
 	mainConn, err := grpc.Dial(mainIp, grpc.WithInsecure())
 	if err != nil {
 		log.WithFields(log.Fields{
 			"node": mainIp,
 			"error": err,
-		}).Error("Cannot dial node")
+		}).Error("Cannot dial snower")
 	}
 	defer mainConn.Close()
 
-	mainClient := pb.NewGossipClient(mainConn)
+	mainClient := pb.NewSnowballClient(mainConn)
 
 	for {
 		// read in input from stdin
@@ -49,12 +38,11 @@ func main() {
 		fmt.Print("Message to send: ")
 		msg, _ := reader.ReadBytes('\n')
 		msg = msg[:(len(msg)-1)] // get rid of \n at the end
+		msgStr := string(msg)
 
 		switch {
-		case string(msg) == "get all":
-			//requests, _ := client.GetAllRequests(context.Background(), &pb.Void{})
-			//fmt.Println(mainIp, requests)
-			for _, ip := range gossipers {
+		case msgStr == "get reqs":
+			for _, ip := range snowers {
 				conn, err := grpc.Dial(ip, grpc.WithInsecure())
 				if err != nil {
 					log.WithFields(log.Fields{
@@ -68,8 +56,23 @@ func main() {
 				fmt.Println(ip, "-", requests.Requests)
 				conn.Close()
 			}
+		case msgStr == "get ordered":
+			for _, ip := range snowers {
+				conn, err := grpc.Dial(ip, grpc.WithInsecure())
+				if err != nil {
+					log.WithFields(log.Fields{
+						"node": ip,
+						"error": err,
+					}).Error("Cannot dial node")
+					continue
+				}
+				c := pb.NewSnowballClient(conn)
+				requests, _ := c.GetOrderedReqs(context.Background(), &pb.Void{})
+				fmt.Println(ip, "-", requests.Requests)
+				conn.Close()
+			}
 		default:
-			mainClient.Push(context.Background(), &pb.ReqBody{Body: msg})
+			mainClient.SendReq(context.Background(), &pb.ReqBody{Body: msg})
 		}
 	}
 }

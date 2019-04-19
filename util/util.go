@@ -28,9 +28,10 @@ func UniqueRandomSample(arr []string, size int) []string {
 
 	generated := make(map[int]bool)
 	subset := make([]string, size)
+	arrLen := len(arr)
 	for i := 0; i < size; i++ {
 		for {
-			randIndex := rand.Intn(size)
+			randIndex := rand.Intn(arrLen)
 			if !generated[randIndex] {
 				generated[randIndex] = true
 				subset[i] = arr[randIndex]
@@ -39,4 +40,8 @@ func UniqueRandomSample(arr []string, size int) []string {
 		}
 	}
 	return subset
+}
+
+func RemoveOneFromArr(arr []string, toRemove int) []string {
+	return append(arr[:toRemove], arr[toRemove+1:]...)
 }

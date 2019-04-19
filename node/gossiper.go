@@ -134,7 +134,7 @@ func CreateGossiper(ip string) *Gossiper {
 	return newGossiper
 }
 
-func GossiperUp(g *Gossiper) {
+func (g *Gossiper) GossiperUp() {
 	lis, err := net.Listen("tcp", tcpString(g.ip))
 	if err != nil {
 		log.WithField("ip", g.ip).Error("Cannot listen on tcp")
