@@ -2,7 +2,7 @@
 
 echo "Generating network configuration..."
 
-numOfNodes=4
+numOfNodes=300
 
 maxNeighborSize=$((numOfNodes / 2))
 ips=()

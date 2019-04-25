@@ -34,11 +34,22 @@ func (g *Gossiper) Poke(ctx context.Context, reqId *pb.ReqId) (*pb.Bool, error) 
 }
 
 func (g *Gossiper) Push(ctx context.Context, reqBody *pb.ReqBody) (*pb.Void, error) {
+	reqHash := util.HashBytes(reqBody.Body)
+
+	/*
+	   a second check whether g already has this request to avoid double storing
+	   caused by concurrency. example situation:
+	   A pokes C about req1, B pokes C about req1, A and B both get response that
+	   C doesn't have req1. both push req1 to C
+	*/
+	if _, exists := g.hashes[string(reqHash)]; exists {
+		return &pb.Void{}, nil
+	}
+
 	g.requestsLock.Lock()
 	g.requests = append(g.requests, string(reqBody.Body))
 	g.requestsLock.Unlock()
 
-	reqHash := util.HashBytes(reqBody.Body)
 	g.hashes[string(reqHash)] = true
 
 	log.WithFields(log.Fields{
