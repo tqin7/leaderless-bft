@@ -43,5 +43,8 @@ func UniqueRandomSample(arr []string, size int) []string {
 }
 
 func RemoveOneFromArr(arr []string, toRemove int) []string {
+	if toRemove == -1 {
+		return arr
+	}
 	return append(arr[:toRemove], arr[toRemove+1:]...)
 }
