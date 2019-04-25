@@ -8,15 +8,17 @@ import (
 	log "github.com/sirupsen/logrus"
 	pb "github.com/spockqin/leaderless-bft/proto"
 	"context"
+	"github.com/spockqin/leaderless-bft/tests/network"
 )
 
 func main() {
 
-	numOfNodes, start := 4, 2
+	var nodes network.Nodes
+	network.ReadNetworkConfig(&nodes, "../tests/network/config.json")
 
 	var snowers []string
-	for i := start; i < start + numOfNodes; i++ {
-		snowers = append(snowers, fmt.Sprintf("127.0.0.%d:7777", i))
+	for _, node := range nodes.Nodes {
+		snowers = append(snowers, node.Ip)
 	}
 
 	// create connection with main point of contact

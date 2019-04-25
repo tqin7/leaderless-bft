@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+echo "Generating network configuration..."
+
 numOfNodes=4
 
 maxNeighborSize=$((numOfNodes / 2))

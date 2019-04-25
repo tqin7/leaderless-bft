@@ -101,7 +101,7 @@ func (s *Snower) getMajorityVote() string {
 	networkSubset := util.UniqueRandomSample(s.allIps, sampleSize)
 	votes := CreateConfidenceMap()
 	for _, ip := range networkSubset {
-		conn, err := grpc.Dial(tcpString(ip), grpc.WithInsecure())
+		conn, err := grpc.Dial(ip, grpc.WithInsecure())
 		if err != nil {
 			log.WithFields(log.Fields{
 				"ip": s.ip,
@@ -158,7 +158,7 @@ func CreateSnower(ip string, allIps []string) *Snower {
 }
 
 func (s *Snower) SnowerUp() {
-	lis, err := net.Listen("tcp", tcpString(s.ip))
+	lis, err := net.Listen("tcp", s.ip)
 	if err != nil {
 		log.WithField("ip", s.ip).Error("Cannot listen on tcp [snower]")
 	}

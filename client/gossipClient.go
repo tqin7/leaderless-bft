@@ -8,15 +8,17 @@ import (
 	log "github.com/sirupsen/logrus"
 	pb "github.com/spockqin/leaderless-bft/proto"
 	"context"
+	"github.com/spockqin/leaderless-bft/tests/network"
 )
 
 func main() {
 
-	numOfNodes, start := 2, 2
+	var nodes network.Nodes
+	network.ReadNetworkConfig(&nodes, "../tests/network/config.json")
 
 	var gossipers []string
-	for i := start; i < start + numOfNodes; i++ {
-		gossipers = append(gossipers, fmt.Sprintf("127.0.0.%d:7777", i))
+	for _, node := range nodes.Nodes {
+		gossipers = append(gossipers, node.Ip)
 	}
 
 	// create connection with main point of contact
@@ -29,6 +31,7 @@ func main() {
 		}).Error("Cannot dial gossiper")
 	}
 	defer mainConn.Close()
+	fmt.Println("established main connection with ", mainIp)
 
 	mainClient := pb.NewGossipClient(mainConn)
 
@@ -41,7 +44,7 @@ func main() {
 		msgStr := string(msg)
 
 		switch {
-		case msgStr == "get requests":
+		case msgStr == "get all":
 			//requests, _ := client.GetAllRequests(context.Background(), &pb.Void{})
 			//fmt.Println(mainIp, requests)
 			for _, ip := range gossipers {

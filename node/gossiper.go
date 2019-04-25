@@ -4,7 +4,6 @@ import (
 	"sync"
 	"context"
 	pb "github.com/spockqin/leaderless-bft/proto"
-	. "github.com/spockqin/leaderless-bft/types"
 	log "github.com/sirupsen/logrus"
 	"github.com/spockqin/leaderless-bft/util"
 	"net"
@@ -66,7 +65,7 @@ func (g *Gossiper) GetAllRequests(ctx context.Context, void *pb.Void) (*pb.Reque
 }
 
 func (g *Gossiper) sendGossip(neighborIp string, request []byte) {
-	conn, err := grpc.Dial(tcpString(neighborIp), grpc.WithInsecure())
+	conn, err := grpc.Dial(neighborIp, grpc.WithInsecure())
 	if err != nil {
 		log.WithFields(log.Fields{
 			"ip": g.ip,
@@ -135,7 +134,7 @@ func CreateGossiper(ip string) *Gossiper {
 }
 
 func (g *Gossiper) GossiperUp() {
-	lis, err := net.Listen("tcp", tcpString(g.ip))
+	lis, err := net.Listen("tcp", g.ip)
 	if err != nil {
 		log.WithField("ip", g.ip).Error("Cannot listen on tcp")
 	}
@@ -147,6 +146,6 @@ func (g *Gossiper) GossiperUp() {
 	grpcServer.Serve(lis)
 }
 
-func tcpString(ip string) string {
-	return ip + ":" + CONN_TCP_PORT
-}
+//func tcpString(ip string) string {
+//	return ip + ":" + CONN_TCP_PORT
+//}
