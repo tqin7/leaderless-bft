@@ -17,13 +17,24 @@ type Gossiper struct {
 	peers []string // known peers
 	peersLock sync.Mutex
 
-	hashes map[string]bool // hash of requests known
+	hashes map[string]bool // hashes of requests known
+	poked map[string]bool // hashes of requests poked for
+	pokedLock sync.Mutex
 	requests []string // known requests
 	requestsLock sync.Mutex
 }
 
 func (g *Gossiper) Poke(ctx context.Context, reqId *pb.ReqId) (*pb.Bool, error) {
-	_, exists := g.hashes[string(reqId.Hash)]
+	// check whether g is already poked for this request to
+	// avoid double pushing caused by concurrency
+	g.pokedLock.Lock()
+	exists := g.poked[string(reqId.Hash)]
+	g.poked[string(reqId.Hash)] = true
+	g.pokedLock.Unlock()
+
+	if !exists {
+		_, exists = g.hashes[string(reqId.Hash)]
+	}
 
 	log.WithFields(log.Fields{
 		"ip": g.ip,
@@ -36,19 +47,13 @@ func (g *Gossiper) Poke(ctx context.Context, reqId *pb.ReqId) (*pb.Bool, error) 
 func (g *Gossiper) Push(ctx context.Context, reqBody *pb.ReqBody) (*pb.Void, error) {
 	reqHash := util.HashBytes(reqBody.Body)
 
-	/*
-	   a second check whether g already has this request to avoid double storing
-	   caused by concurrency. example situation:
-	   A pokes C about req1, B pokes C about req1, A and B both get response that
-	   C doesn't have req1. both push req1 to C
-	*/
-	if _, exists := g.hashes[string(reqHash)]; exists {
-		return &pb.Void{}, nil
-	}
-
 	g.requestsLock.Lock()
 	g.requests = append(g.requests, string(reqBody.Body))
 	g.requestsLock.Unlock()
+
+	g.pokedLock.Lock()
+	delete(g.poked, string(reqHash))
+	g.pokedLock.Unlock()
 
 	g.hashes[string(reqHash)] = true
 
@@ -139,6 +144,7 @@ func CreateGossiper(ip string) *Gossiper {
 	newGossiper.ip = ip
 	newGossiper.peers = make([]string, 0)
 	newGossiper.hashes = make(map[string]bool)
+	newGossiper.poked = make(map[string]bool)
 	newGossiper.requests = make([]string, 0)
 
 	return newGossiper

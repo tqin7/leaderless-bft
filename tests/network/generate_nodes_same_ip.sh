@@ -4,7 +4,8 @@ echo "Generating network configuration..."
 
 numOfNodes=300
 
-maxNeighborSize=$((numOfNodes / 2))
+maxNeighborSize=$(echo "l($numOfNodes)" | bc -l)
+maxNeighborSize=$( printf "%.0f" $maxNeighborSize )
 ips=()
 nodesGenerated=0
 curPort=30000
@@ -20,7 +21,7 @@ do
     curPort=$((curPort+1))
 done
 
-echo -e "\nnodes generated: ${ips[@]}"
+#echo -e "\nnodes generated: ${ips[@]}"
 
 jsonStr=""
 

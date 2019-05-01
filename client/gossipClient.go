@@ -44,6 +44,8 @@ func main() {
 		msgStr := string(msg)
 
 		switch {
+		case msgStr == "":
+			continue
 		case msgStr == "get reqs":
 			//requests, _ := client.GetAllRequests(context.Background(), &pb.Void{})
 			//fmt.Println(mainIp, requests)
