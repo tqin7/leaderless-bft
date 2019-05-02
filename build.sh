@@ -3,11 +3,15 @@
 mkdir -p ./cluster/tests/network
 mkdir ./cluster/clients
 
-echo 'Generating network graph...'
 cd ./tests/network
+echo 'Generating network graph...'
 ./generate_nodes_same_ip.sh
-cd ../..
 echo -e 'Done\n'
+cd ..
+#echo 'Compiling tests...'
+#go test -c -o ../cluster/tests/tests.test
+#echo -e 'Done\n'
+cd ..
 
 cp ./tests/network/config.json ./cluster/tests/network/config.json
 

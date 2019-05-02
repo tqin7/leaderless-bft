@@ -10,6 +10,9 @@ import (
 	"context"
 	"github.com/spockqin/leaderless-bft/tests/network"
 	"github.com/spockqin/leaderless-bft/util"
+	"time"
+	"strconv"
+	"math/rand"
 )
 
 func main() {
@@ -65,6 +68,10 @@ func main() {
 				fmt.Println(ip, "-", requests.Requests)
 				conn.Close()
 			}
+		case msgStr == "throughput same":
+			testThroughPutSameConn(gossipers)
+		case msgStr == "throughput random":
+			testThroughPutRandomConn(gossipers)
 		default:
 			hash := util.HashBytes([]byte(msgStr))
 			exists, _ := mainClient.Poke(context.Background(), &pb.ReqId{Hash: hash})
@@ -74,5 +81,43 @@ func main() {
 			}
 			mainClient.Push(context.Background(), &pb.ReqBody{Body: msg})
 		}
+	}
+}
+
+func testThroughPutSameConn(gossipers []string) {
+	fmt.Println("Timestamp right before first dialing: ",
+		time.Now().Format("2006-01-01 15:04:05 .000"))
+
+	mainIp := gossipers[0]
+	mainConn, err := grpc.Dial(mainIp, grpc.WithInsecure())
+	if err != nil {
+		fmt.Println("Cannot establish TCP connection with gossiper")
+		return
+	}
+	defer mainConn.Close()
+
+	mainClient := pb.NewGossipClient(mainConn)
+
+	for i := 0; i < 100; i++ {
+		req := []byte(strconv.Itoa(i))
+		mainClient.Push(context.Background(), &pb.ReqBody{Body: req})
+	}
+}
+
+func testThroughPutRandomConn(gossipers []string) {
+	fmt.Println("Timestamp right before first dialing: ",
+		time.Now().Format("2006-01-01 15:04:05 .000"))
+
+	i, n := 0, len(gossipers)
+	for i < 1000 {
+		conn, err := grpc.Dial(gossipers[rand.Intn(n)], grpc.WithInsecure())
+		if err != nil {
+			continue
+		}
+		client := pb.NewGossipClient(conn)
+		req := []byte(strconv.Itoa(i))
+		client.Push(context.Background(), &pb.ReqBody{Body: req})
+		conn.Close()
+		i++
 	}
 }

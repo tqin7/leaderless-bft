@@ -8,8 +8,8 @@ import (
 	"github.com/spockqin/leaderless-bft/util"
 	"net"
 	"google.golang.org/grpc"
-	"github.com/spockqin/leaderless-bft/types"
 	"time"
+	"github.com/spockqin/leaderless-bft/types"
 )
 
 // Structure of each gossiper
@@ -20,6 +20,7 @@ type Gossiper struct {
 	peersLock sync.Mutex
 
 	hashes map[string]bool // hashes of requests known
+	hashesLock sync.Mutex
 	poked map[string]bool // hashes of requests poked for
 	pokedLock sync.Mutex
 	requests []string // known requests
@@ -35,7 +36,9 @@ func (g *Gossiper) Poke(ctx context.Context, reqId *pb.ReqId) (*pb.Bool, error) 
 	g.pokedLock.Unlock()
 
 	if !exists {
+		g.hashesLock.Lock()
 		_, exists = g.hashes[string(reqId.Hash)]
+		g.hashesLock.Unlock()
 	}
 
 	log.WithFields(log.Fields{
@@ -59,7 +62,9 @@ func (g *Gossiper) Push(ctx context.Context, reqBody *pb.ReqBody) (*pb.Void, err
 	delete(g.poked, string(reqHash))
 	g.pokedLock.Unlock()
 
+	g.hashesLock.Lock()
 	g.hashes[string(reqHash)] = true
+	g.hashesLock.Unlock()
 
 	log.WithFields(log.Fields{
 		"ip": g.ip,
@@ -70,7 +75,7 @@ func (g *Gossiper) Push(ctx context.Context, reqBody *pb.ReqBody) (*pb.Void, err
 	// to check # of max sockets open at once, run "ulimit -n"
 	maxSoc := make(chan bool, types.MAX_SOCKETS)
 	for _, peerIp := range g.peers {
-		maxSoc <- true // blocks if maxSoc is full
+		//maxSoc <- true // blocks if maxSoc is full
 		go g.sendGossip(peerIp, reqBody.Body, maxSoc)
 	}
 
@@ -90,7 +95,7 @@ func (g *Gossiper) GetAllRequests(ctx context.Context, void *pb.Void) (*pb.Reque
 
 func (g *Gossiper) sendGossip(neighborIp string, request []byte, c chan bool) {
 	conn, err := grpc.Dial(neighborIp, grpc.WithInsecure())
-	defer func(c chan bool) { <-c }(c)
+	//defer func(c chan bool) { <-c }(c)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"ip": g.ip,

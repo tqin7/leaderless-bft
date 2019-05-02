@@ -2,7 +2,7 @@
 
 #echo "Generating network configuration..."
 
-numOfNodes=5
+numOfNodes=1000
 
 maxNeighborSize=$(echo "l($numOfNodes)" | bc -l)
 maxNeighborSize=$( printf "%.0f" $maxNeighborSize )
