@@ -30,6 +30,7 @@ func main() {
 			"node": mainIp,
 			"error": err,
 		}).Error("Cannot dial gossiper")
+		return
 	}
 	defer mainConn.Close()
 	fmt.Println("established main connection with ", mainIp)

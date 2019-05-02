@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-echo "Generating network configuration..."
+#echo "Generating network configuration..."
 
-numOfNodes=1000
+numOfNodes=5
 
 maxNeighborSize=$(echo "l($numOfNodes)" | bc -l)
 maxNeighborSize=$( printf "%.0f" $maxNeighborSize )
@@ -45,6 +45,6 @@ jsonStr="{\"nodes\":[$jsonStr]}"
 
 echo ${jsonStr} > config.json
 
-echo "wrote network config to json file"
+echo "Network graph saved to json file"
 
 # go to https://codebeautify.org/jsonviewer to beautify the json generated

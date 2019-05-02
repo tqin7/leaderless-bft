@@ -9,6 +9,7 @@ import (
 	"net"
 	"google.golang.org/grpc"
 	"github.com/spockqin/leaderless-bft/types"
+	"time"
 )
 
 // Structure of each gossiper
@@ -42,6 +43,8 @@ func (g *Gossiper) Poke(ctx context.Context, reqId *pb.ReqId) (*pb.Bool, error) 
 		"exists": exists,
 	}).Info("got poked")
 
+	log.Info("Timestamp: ",
+		time.Now().Format("2006-01-01 15:04:05 .000"))
 	return &pb.Bool{Status: exists}, nil
 }
 
