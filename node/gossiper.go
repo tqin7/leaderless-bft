@@ -8,6 +8,7 @@ import (
 	"github.com/spockqin/leaderless-bft/util"
 	"net"
 	"google.golang.org/grpc"
+	"github.com/spockqin/leaderless-bft/types"
 )
 
 // Structure of each gossiper
@@ -62,8 +63,12 @@ func (g *Gossiper) Push(ctx context.Context, reqBody *pb.ReqBody) (*pb.Void, err
 		"request": string(reqBody.Body),
 	}).Info("stored new request")
 
+	// each connection opens a socket
+	// to check # of max sockets open at once, run "ulimit -n"
+	maxSoc := make(chan bool, types.MAX_SOCKETS)
 	for _, peerIp := range g.peers {
-		go g.sendGossip(peerIp, reqBody.Body)
+		maxSoc <- true // blocks if maxSoc is full
+		go g.sendGossip(peerIp, reqBody.Body, maxSoc)
 	}
 
 	return &pb.Void{}, nil
@@ -80,8 +85,9 @@ func (g *Gossiper) GetAllRequests(ctx context.Context, void *pb.Void) (*pb.Reque
 	return &pb.Requests{Requests: g.requests}, nil
 }
 
-func (g *Gossiper) sendGossip(neighborIp string, request []byte) {
+func (g *Gossiper) sendGossip(neighborIp string, request []byte, c chan bool) {
 	conn, err := grpc.Dial(neighborIp, grpc.WithInsecure())
+	defer func(c chan bool) { <-c }(c)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"ip": g.ip,

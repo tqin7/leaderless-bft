@@ -2,7 +2,7 @@
 
 echo "Generating network configuration..."
 
-numOfNodes=300
+numOfNodes=1000
 
 maxNeighborSize=$(echo "l($numOfNodes)" | bc -l)
 maxNeighborSize=$( printf "%.0f" $maxNeighborSize )
@@ -45,6 +45,6 @@ jsonStr="{\"nodes\":[$jsonStr]}"
 
 echo ${jsonStr} > config.json
 
-echo -e "wrote network config to json file\n"
+echo "wrote network config to json file"
 
 # go to https://codebeautify.org/jsonviewer to beautify the json generated

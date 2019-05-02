@@ -9,6 +9,7 @@ import (
 	pb "github.com/spockqin/leaderless-bft/proto"
 	"context"
 	"github.com/spockqin/leaderless-bft/tests/network"
+	"github.com/spockqin/leaderless-bft/util"
 )
 
 func main() {
@@ -64,6 +65,12 @@ func main() {
 				conn.Close()
 			}
 		default:
+			hash := util.HashBytes([]byte(msgStr))
+			exists, _ := mainClient.Poke(context.Background(), &pb.ReqId{Hash: hash})
+			if exists.Status { // duplicate requests
+				log.Info("Duplicate request")
+				continue
+			}
 			mainClient.Push(context.Background(), &pb.ReqBody{Body: msg})
 		}
 	}

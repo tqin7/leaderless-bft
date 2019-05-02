@@ -2,7 +2,7 @@ package types
 
 const (
 	SNOWBALL_SAMPLE_ROUNDS = 5
-	//NO_PROPOSAL =
+	MAX_SOCKETS = 40
 )
 
 const (
