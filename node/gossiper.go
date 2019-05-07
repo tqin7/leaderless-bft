@@ -75,7 +75,7 @@ func (g *Gossiper) Push(ctx context.Context, reqBody *pb.ReqBody) (*pb.Void, err
 	// to check # of max sockets open at once, run "ulimit -n"
 	maxSoc := make(chan bool, types.MAX_SOCKETS)
 	for _, peerIp := range g.peers {
-		//maxSoc <- true // blocks if maxSoc is full
+		maxSoc <- true // blocks if maxSoc is full
 		go g.sendGossip(peerIp, reqBody.Body, maxSoc)
 	}
 
@@ -94,8 +94,10 @@ func (g *Gossiper) GetAllRequests(ctx context.Context, void *pb.Void) (*pb.Reque
 }
 
 func (g *Gossiper) sendGossip(neighborIp string, request []byte, c chan bool) {
+	reqHash := util.HashBytes(request)
+
 	conn, err := grpc.Dial(neighborIp, grpc.WithInsecure())
-	//defer func(c chan bool) { <-c }(c)
+	defer func(c chan bool) { <-c }(c)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"ip": g.ip,
@@ -108,8 +110,9 @@ func (g *Gossiper) sendGossip(neighborIp string, request []byte, c chan bool) {
 
 	client := pb.NewGossipClient(conn)
 
-	reqHash := util.HashBytes(request)
-	exists, err := client.Poke(context.Background(), &pb.ReqId{Hash: reqHash})
+	ctx, cancel := context.WithTimeout(context.Background(), types.GRPC_TIMEOUT)
+	exists, err := client.Poke(ctx, &pb.ReqId{Hash: reqHash}, grpc.WaitForReady(true))
+	defer cancel()
 
 	if err != nil {
 		log.WithFields(log.Fields{
@@ -129,7 +132,7 @@ func (g *Gossiper) sendGossip(neighborIp string, request []byte, c chan bool) {
 				"peer": neighborIp,
 				"request": string(request),
 			}).Info("push request to peer\n")
-			client.Push(context.Background(), &pb.ReqBody{Body: request})
+			client.Push(ctx, &pb.ReqBody{Body: request}, grpc.WaitForReady(true))
 		}
 	}
 }

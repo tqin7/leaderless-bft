@@ -1,8 +1,12 @@
 package types
 
+import "time"
+
 const (
 	SNOWBALL_SAMPLE_ROUNDS = 5
 	MAX_SOCKETS = 25
+	GRPC_TIMEOUT = time.Second * 40
+	//GRPC_TIMEOUT = time.Nanosecond * 5
 )
 
 const (
