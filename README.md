@@ -1,5 +1,10 @@
 # Leaderless-BFT
-## Overview
+1. [Project Overview](##Project-Overview)
+2. [Instructions](##Instructions)
+3. [Techincal Implementation](##Technical-Implementation)
+4. [Directory Overview](##Directory-Overview)
+
+## Project Overview
 Leaderless Byzantine Fault Tolerance is a new blockchain consensus algorithm (also applicable to general distributed systems) that tolerates Byzantine faults while being leaderless and deterministic. It's based upon pBFT (practical Byzantine Fault Tolerance) and Snowball. 
 * pBFT is deterministic but relies on the notion of a primary/leader to determine the total order of requests (through pre-prepare, prepare, commit phases)
 * Snowball is leaderless but probabilistic as the algorithm proceeds by taking random samples of the network
@@ -15,7 +20,7 @@ To interact with a layer that's brought up, run the corresponding client program
 ## Technical Implementation
 The main programming language is Go. The peer-to-peer communication layer implements gossip protocols. The consensus layer lies on top of the p2p layer and implements Leaderless BFT.
 
-## Directories
+## Directory Overview
 `client/`: mainly for interactively testing and measuring the services
 * `gossipClient.go`: a client that interacts with the gossip service
 * `snowballClient.go`: a client that interacts with the snowball service
