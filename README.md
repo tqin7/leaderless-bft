@@ -12,6 +12,9 @@ Leaderless Byzantine Fault Tolerance is a new blockchain consensus algorithm (al
 We are looking to replace the primary in pBFT with Snowball algorithm, i.e. use Snowball (which pulls information from the entire network) to simulate the primary's tasks such as assigning total order, so that we arrive at a leaderless and deterministic algorithm that has a better balance between security and efficiency.
 
 ## Instructions
+Install protoc: http://google.github.io/proto-lens/installing-protoc.html
+Install protoc-gen-go: https://github.com/golang/protobuf
+
 To run the system, run `build.sh` to generate a folder `cluster` that contains the necessary `[layer]Up`, `[layer]Client`, and network config files.
 
 To run a layer, simply run its corresponding program in `cluster`.
