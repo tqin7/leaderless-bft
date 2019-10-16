@@ -20,6 +20,15 @@ To run the system, run `build.sh` to generate a folder `cluster` that contains t
 To run a layer, simply run its corresponding program in `cluster`.
 To interact with a layer that's brought up, run the corresponding client program, which creates an interactive channel that sends messages/requests to the nodes.
 
+<b>Example</b> 
+<u>Gossip Layer</u>
+1. Go to `./tests/network/generate_nodes_same_ip.sh` and change the top line to `numOfNodes=x` where x is your desired number of nodes in the network
+2. Go back to root directory and run `./build.sh`, which should generate network graph, proto files, and build go files.
+3. Go to `./cluster` and run `./gossipUp`. You should see each node being brought up.
+4. To interact with the gossip nodes, go to `./cluster/clients` and run `./gossipClient`. You should see the terminal requesting for messages.
+    * send message `get reqs` to see what requests each node knows
+    * send any other message (e.g. `req1`) to send a request to the network
+
 ## Technical Implementation
 The main programming language is Go. The peer-to-peer communication layer implements gossip protocols. The consensus layer lies on top of the p2p layer and implements Leaderless BFT.
 
