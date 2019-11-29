@@ -20,6 +20,8 @@ service Snowball {
     rpc GetOrderedReqs (Void) returns (Requests) {}
 }
 
+
+
 message Requests {
     repeated string requests = 1;
 }

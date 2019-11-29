@@ -5,6 +5,8 @@ import (
 	"errors"
 	node "github.com/spockqin/leaderless-bft/proto"
 	"github.com/spockqin/leaderless-bft/types"
+	"google.golang.org/grpc"
+	"net"
 	"time"
 	log "github.com/sirupsen/logrus"
 	"fmt"
@@ -32,6 +34,19 @@ type MsgBuffer struct {
 }
 
 const ResolvingTimeDuration = time.Millisecond * 2000 // 2 second.
+
+func (pbfter *Pbfter) PbfterUp() {
+	lis, err := net.Listen("tcp", pbfter.ip)
+	if err != nil {
+		log.WithField("ip", s.ip).Error("Cannot listen on tcp [pbfter]")
+	}
+
+	grpcServer := grpc.NewServer()
+
+	node.RegisterGossipServer(grpcServer, pbfter)
+
+	grpcServer.Serve(lis)
+}
 
 func CreatePbfter(nodeID string, ip string, nodeTable map[string]string) *Pbfter {
 	const viewID = 100000
@@ -414,7 +429,11 @@ func (pbfter *Pbfter) GetCommit(commitMsg *node.VoteMsg) error {
 		// save the last version of committed messages to ndoe
 		pbfter.CommittedMsgs = append(pbfter.CommittedMsgs, committedMsg)
 		LogStage("Commit", true)
-		pbfter.Reply(replyMsg)
+		err:= pbfter.Reply(replyMsg)
+		if err != nil {
+			log.Error("PBFTER: GetCommit Reply error")
+			return err
+		}
 		LogStage("Reply", true)
 	}
 
