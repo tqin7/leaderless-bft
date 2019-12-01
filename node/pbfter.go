@@ -425,6 +425,17 @@ func (state *State) verifyMsg(viewID int64, sequenceID int64, digestGot string) 
 	return true
 }
 
+func CreatePbfter(nodeID string, viewID int64, ip string, allIps []string) *Pbfter {
+	newPbfter := new(Pbfter)
+	newPbfter.ip = ip
+	newPbfter.peers = make([]string, 0)
+	newPbfter.hashes = make(map[string]bool)
+	newPbfter.requests = make([]string, 0)
+
+	newPbfter.NodeID = nodeID
+	newPbfter.ViewID = viewID
+	return newPbfter
+}
 
 func (p *Pbfter) PbfterUp() {
 	lis, err := net.Listen("tcp", p.ip)
