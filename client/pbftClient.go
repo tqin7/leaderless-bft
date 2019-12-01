@@ -68,7 +68,11 @@ func main() {
 				conn.Close()
 			}
 		default:
-			mainClient.SendReq(context.Background(), &pb.PbftReq{ClientID: elements[0], Operation: elements[1], Timestamp: timeStamp})
+			_, err := mainClient.GetReq(context.Background(), &pb.PbftReq{ClientID: elements[0], Operation: elements[1], Timestamp: timeStamp})
+			if err != nil {
+				log.Error("Client sendReq error!")
+				panic(err)
+			}
 		}
 	}
 }

@@ -22,15 +22,15 @@ service Snowball {
 
 service Pbft {
     // client sends request
-    rpc SendReq (PbftReq) returns (Void) {}
+    rpc GetReq (PbftReq) returns (Void) {}
     // node sends prePrepare msg
-    rpc SendPrePrepare (PrePrepareMsg) returns (Void) {}
+    rpc GetPrePrepare (PrePrepareMsg) returns (Void) {}
     // node sends prepare msg
-    rpc SendPrepare (PrepareMsg) returns (Void) {}
+    rpc GetPrepare (PrepareMsg) returns (Void) {}
     // node sends commit msg
-    rpc SendCommit (CommitMsg) returns (Void) {}
+    rpc GetCommit (CommitMsg) returns (Void) {}
     // node sends reply msg to the client
-    rpc SendReply (ReplyMsg) returns (Void) {}
+//    rpc SendReply (ReplyMsg) returns (Void) {}
 }
 
 message PbftReq {

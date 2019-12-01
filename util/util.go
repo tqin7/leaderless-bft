@@ -2,8 +2,6 @@ package util
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"math/rand"
 )
 
@@ -49,20 +47,4 @@ func RemoveOneFromArr(arr []string, toRemove int) []string {
 		return arr
 	}
 	return append(arr[:toRemove], arr[toRemove+1:]...)
-}
-
-func digest(object interface{}) (string, error) {
-	msg, err := json.Marshal(object)
-
-	if err != nil {
-		return "", err
-	}
-
-	return Hash(msg), nil
-}
-
-func Hash(content []byte) string {
-	h := sha256.New()
-	h.Write(content)
-	return hex.EncodeToString(h.Sum(nil))
 }
