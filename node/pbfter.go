@@ -1,533 +1,478 @@
 package proto
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
-	node "github.com/spockqin/leaderless-bft/proto"
-	"github.com/spockqin/leaderless-bft/types"
-	"time"
-	log "github.com/sirupsen/logrus"
 	"fmt"
+	"github.com/Chazzzzzzz/test-leaderless/types"
+	log "github.com/sirupsen/logrus"
+	pb "github.com/spockqin/leaderless-bft/proto"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
+	"net"
+	"sync"
+	"time"
+	tp "github.com/spockqin/leaderless-bft/types"
+	util "github.com/spockqin/leaderless-bft/util"
 )
 
-type Pbfter struct {
-	Gossiper
-	NodeID			string
-	NodeTable		map[string]string // map[nodeID] -> ip
-	ViewID			int64
-	Leader			string // leader nodeID
-	CurrentState	*node.State
-	CommittedMsgs	[]*node.RequestMsg
-	MsgBuffer		*MsgBuffer
-	MsgEntrance		chan interface{}
-	MsgDelivery		chan interface{}
-	Alarm			chan bool
+type Stage int
+const (
+	Idle        Stage = iota // Node is created successfully, but the consensus process is not started yet.
+	PrePrepared              // The ReqMsgs is processed successfully. The node is ready to head to the Prepare stage.
+	Prepared                 // Same with `prepared` stage explained in the original paper.
+	Committed                // Same with `committed-local` stage explained in the original paper.
+)
+
+type MsgLogs struct {
+	ReqMsg        *tp.PbftReq
+	PrepareMsgs   map[string]*tp.PrepareMsg
+	CommitMsgs    map[string]*tp.CommitMsg
+}
+
+type State struct {
+	ViewID		   int64
+	MsgLogs        *MsgLogs
+	LastSequenceID int64
+	CurrentStage   Stage
 }
 
 type MsgBuffer struct {
-	ReqMsgs        []*node.RequestMsg
-	PrePrepareMsgs []*node.PrePrepareMsg
-	PrepareMsgs    []*node.VoteMsg
-	CommitMsgs     []*node.VoteMsg
+	ReqMsgs        []*tp.PbftReq
+	PrePrepareMsgs []*tp.PrePrepareMsg
+	PrepareMsgs    []*tp.PrepareMsg
+	CommitMsgs     []*tp.CommitMsg
 }
 
-const ResolvingTimeDuration = time.Millisecond * 2000 // 2 second.
+type Pbfter struct {
+	Gossiper
+	NodeID        string
+	ViewID        int64
+	CurrentState  *State
+	CommittedMsgs []*tp.PbftReq
+	MsgBuffer     *MsgBuffer
+	MsgDelivery   chan interface{}
+}
 
-func CreatePbfter(nodeID string, ip string, nodeTable map[string]string) *Pbfter {
-	const viewID = 100000
+const f = 1;
 
-	pbfter := &Pbfter{
-		NodeID:        nodeID,
-		NodeTable:	   nodeTable,
-		ViewID:        viewID,
-		Leader:		   "0",
-		CurrentState:  nil,
-		CommittedMsgs: make([]*node.RequestMsg, 0),
-		MsgBuffer:     &MsgBuffer{
-			ReqMsgs:        make([]*node.RequestMsg, 0),
-			PrePrepareMsgs: make([]*node.PrePrepareMsg, 0),
-			PrepareMsgs:    make([]*node.VoteMsg, 0),
-			CommitMsgs:     make([]*node.VoteMsg, 0),
-		},
-		MsgEntrance:   make(chan interface{}),
-		MsgDelivery:   make(chan interface{}),
-		Alarm:         make(chan bool),
+func (p *Pbfter) GetReq(ctx context.Context, request *pb.ReqBody) (*pb.Void, error) {
+	var req *tp.PbftReq
+	err := json.Unmarshal(request.GetBody(), req)
+	if err != nil {
+		log.Error("Error happens when unmarshal request [GetReq]")
 	}
 
-	pbfter.ip = ip
-	pbfter.peers = make([]string, 0)
+	LogMsg(req)
 
-	// start deliver messages
-	go pbfter.dispatchMsg()
-
-	// start timeout alarm trigger
-	go pbfter.timeoutAlarm()
-
-	// start message resolver
-	go pbfter.resolveMsg()
-
-	return pbfter
-}
-
-// deliver message
-func (pbfter *Pbfter) dispatchMsg() {
-	for {
-		select {
-		case msg := <-pbfter.MsgEntrance:
-			err := pbfter.routeMsg(msg)
-			if err != nil {
-				log.WithFields(log.Fields{
-					"error": err,
-				}).Error("dispatchMsg routeMsg error\n")
-			}
-		case <-pbfter.Alarm:
-			err := pbfter.routeMsgWhenAlarmed()
-			if err != nil {
-				log.WithFields(log.Fields{
-					"error": err,
-				}).Error("dispatchMsg routeMsgWhenAlarmed error\n")
-			}
-		}
-	}
-}
-
-// handle arrived messages
-func (pbfter *Pbfter) routeMsg(msg interface{}) []error {
-	switch msg.(type) {
-	case *node.RequestMsg:
-		if pbfter.CurrentState == nil {
-			// Copy buffered messages first
-			msgs := make([]*node.RequestMsg, len(pbfter.MsgBuffer.ReqMsgs))
-			copy(msgs, pbfter.MsgBuffer.ReqMsgs)
-
-			// append a newly arrived message
-			msgs = append(msgs, msg.(*node.RequestMsg))
-
-			// empty the buffer
-			pbfter.MsgBuffer.ReqMsgs = make([]*node.RequestMsg, 0)
-
-			// send messages
-			pbfter.MsgDelivery <- msgs
-
-		} else {
-			pbfter.MsgBuffer.ReqMsgs = append(pbfter.MsgBuffer.ReqMsgs, msg.(*node.RequestMsg))
-		}
-	case *node.PrePrepareMsg:
-		if pbfter.CurrentState == nil {
-			// Copy buffered message first
-			msgs := make([]*node.PrePrepareMsg, len(pbfter.MsgBuffer.PrePrepareMsgs))
-			copy(msgs, pbfter.MsgBuffer.PrePrepareMsgs)
-
-			// append a newly arrived message
-			msgs = append(msgs, msg.(*node.PrePrepareMsg))
-
-			// empty the buffer
-			pbfter.MsgBuffer.PrePrepareMsgs = make([]*node.PrePrepareMsg, 0)
-
-			// send message
-			pbfter.MsgDelivery <- msgs
-		} else {
-			pbfter.MsgBuffer.PrePrepareMsgs = append(pbfter.MsgBuffer.PrePrepareMsgs, msg.(*node.PrePrepareMsg))
-		}
-	case *node.VoteMsg:
-		if msg.(*node.VoteMsg).MsgType == node.PrepareMsg {
-			if pbfter.CurrentState == nil || pbfter.CurrentState.CurrentStage != node.PrePrepared {
-				pbfter.MsgBuffer.PrepareMsgs = append(pbfter.MsgBuffer.PrepareMsgs, msg.(*node.VoteMsg))
-			} else {
-				// copy buffered message first
-				msgs := make([]*node.VoteMsg, len(pbfter.MsgBuffer.PrepareMsgs))
-				copy(msgs, pbfter.MsgBuffer.PrepareMsgs)
-
-				// append a newly arrived message
-				msgs = append(msgs, msg.(*node.VoteMsg))
-
-				// empty the buffer
-				pbfter.MsgBuffer.PrepareMsgs = make([]*node.VoteMsg, 0)
-
-				// send messages
-				pbfter.MsgDelivery <- msgs
-			}
-		} else if msg.(*node.VoteMsg).MsgType == node.CommitMsg{
-			if pbfter.CurrentState == nil || pbfter.CurrentState.CurrentStage != node.Prepared {
-				pbfter.MsgBuffer.CommitMsgs = append(pbfter.MsgBuffer.CommitMsgs, msg.(*node.VoteMsg))
-			} else {
-				// copy buffered message first
-				msgs := make([]*node.VoteMsg, len(pbfter.MsgBuffer.CommitMsgs))
-				copy(msgs, pbfter.MsgBuffer.CommitMsgs)
-
-				// append a newly arrived message
-				msgs = append(msgs, msg.(*node.VoteMsg))
-
-				// empty the buffer
-				pbfter.MsgBuffer.PrepareMsgs = make([]*node.VoteMsg, 0)
-
-				// send messages
-				pbfter.MsgDelivery <- msgs
-			}
-		}
+	err = p.createStateForNewConsensus()
+	if err != nil {
+		return &pb.Void{}, err
 	}
 
-	return nil
-}
+	prePrepareMsg, err := p.CurrentState.StartConsensus(req)
+	if err != nil {
+		log.Error("Error happens when starting consensus [SendReq]")
+	}
 
-// handle arrived messages when timeout (just send out without caching)
-func (pbfter *Pbfter) routeMsgWhenAlarmed() []error {
-	if pbfter.CurrentState == nil {
-		// check ReqMsgs, send them
-		if len(pbfter.MsgBuffer.ReqMsgs) != 0 {
-			msgs := make([]*node.RequestMsg, len(pbfter.MsgBuffer.ReqMsgs))
-			copy(msgs, pbfter.MsgBuffer.ReqMsgs)
-
-			pbfter.MsgDelivery <- msgs
-		}
-
-		// check PrePrepareMsgs, send them
-		if len(pbfter.MsgBuffer.PrePrepareMsgs) != 0 {
-			msgs := make([]*node.PrePrepareMsg, len(pbfter.MsgBuffer.PrePrepareMsgs))
-			copy(msgs, pbfter.MsgBuffer.PrePrepareMsgs)
-
-			pbfter.MsgDelivery <- msgs
-		}
+	// broadcast prePrepareMsg
+	prePrepareMsgBytes, err := json.Marshal(*prePrepareMsg)
+	if err != nil {
+		return &pb.Void{}, errors.New("[GetReq] prePrepareMsg marshal error!")
 	} else {
-		switch pbfter.CurrentState.CurrentStage {
-		case node.PrePrepared:
-			// Check Prepare Msgs, send them
-			if len(pbfter.MsgBuffer.PrepareMsgs) != 0 {
-				msgs := make([]*node.VoteMsg, len(pbfter.MsgBuffer.PrepareMsgs))
-				copy(msgs, pbfter.MsgBuffer.PrepareMsgs)
-
-				pbfter.MsgDelivery <- msgs
-			}
-		case node.Prepared:
-			// Check CommitMsgs, send them
-			if len(pbfter.MsgBuffer.CommitMsgs) != 0 {
-				msgs := make([]*node.VoteMsg, len(pbfter.MsgBuffer.CommitMsgs))
-				copy(msgs, pbfter.MsgBuffer.CommitMsgs)
-
-				pbfter.MsgDelivery <- msgs
-			}
+		_, pushErr := p.Push(ctx, &pb.ReqBody{Body:prePrepareMsgBytes})
+		if pushErr != nil {
+			panic(errors.New("[GetReq] push prePrepareMsgBytes error!"))
 		}
 	}
 
-	return nil
+	LogStage("Pre-prepare", true, p.NodeID)
+
+	return &pb.Void{}, nil
 }
 
-func (pbfter *Pbfter) timeoutAlarm() {
+func (p *Pbfter) ResolveMsg() {
 	for {
-		time.Sleep(ResolvingTimeDuration)
-		pbfter.Alarm <- true
-	}
-}
-
-func (pbfter *Pbfter) resolveMsg() {
-	for {
-		// get buffered message from the dispatcher
-		msgs := <- pbfter.MsgDelivery
+		msgs := <-p.MsgDelivery
 		switch msgs.(type) {
-		case []*node.RequestMsg:
-			errs := pbfter.resolveRequestMsg(msgs.([]*node.RequestMsg))
-			if len(errs) != 0 {
-				log.Error("PBFTER resolveMsg resolveRequestMsg error", errs)
-			}
-		case []*node.PrePrepareMsg:
-			errs := pbfter.resolvePrePrepareMsg(msgs.([]*node.PrePrepareMsg))
-			if len(errs) != 0 {
-				log.Error("PBFTER resolveMsg resolvePrePrepareMsg error", errs)
-			}
-		case []*node.VoteMsg:
-			voteMsgs := msgs.([]*node.VoteMsg)
-			if len(voteMsgs) == 0 {
-				break
-			}
-			if voteMsgs[0].MsgType == node.PrepareMsg {
-				errs := pbfter.resolvePrepareMsg(voteMsgs)
-				if len(errs) != 0 {
-					log.Error("PBFTER resolveMsg resolvePrepareMsg error", errs)
+		case []*tp.PrePrepareMsg:
+			for _, msg := range msgs.([]*tp.PrePrepareMsg) {
+				err := p.GetPrePrepare(msg)
+				if err != nil {
+					log.Error("[ResolveMsg] resolve PrePrepare Error")
+					panic(-1)
 				}
-			} else if voteMsgs[0].MsgType == node.CommitMsg {
-				errs := pbfter.resolveCommitMsg(voteMsgs)
-				if len(errs) != 0 {
-					log.Error("PBFTER resolveMsg resolveCommitMsg error", errs)
+			}
+		case []*tp.PrepareMsg:
+			for _, msg := range msgs.([]*tp.PrepareMsg) {
+				err := p.GetPrepare(msg)
+				if err != nil {
+					log.Error("[ResolveMsg] resolve PrePrepare Error")
+					panic(-1)
+				}
+			}
+		case []*tp.CommitMsg:
+			for _, msg := range msgs.([]*tp.CommitMsg) {
+				err := p.GetCommit(msg)
+				if err != nil {
+					log.Error("[ResolveMsg] resolve PrePrepare Error")
+					panic(-1)
 				}
 			}
 		}
+
 	}
 }
 
-func (pbfter *Pbfter) resolveRequestMsg(msgs []*node.RequestMsg) []error {
-	errs := make([]error, 0)
-
-	for _, resMsg := range msgs {
-		err := pbfter.GetReq(resMsg)
-		if err != nil {
-			errs = append(errs, err)
-		}
-	}
-
-	if len(errs) != 0 {
-		return errs
-	}
-
-	return nil
-}
-
-func (pbfter *Pbfter) resolvePrePrepareMsg(msgs []*node.PrePrepareMsg) []error {
-	errs := make([]error, 0)
-
-	for _, prePrepareMsg := range msgs {
-		err := pbfter.GetPrePrepare(prePrepareMsg)
-		if err != nil {
-			errs = append(errs, err)
-		}
-	}
-
-	if len(errs) != 0 {
-		return errs
-	}
-
-	return nil
-}
-
-func (pbfter *Pbfter) resolvePrepareMsg(msgs []*node.VoteMsg) [] error {
-	errs := make([]error, 0)
-
-	for _, prePareMsg := range msgs {
-		err := pbfter.GetPrepare(prePareMsg)
-		if err != nil {
-			errs = append(errs, err)
-		}
-	}
-
-	if len(errs) != 0 {
-		return errs
-	}
-
-	return nil
-}
-
-func (pbfter *Pbfter) resolveCommitMsg(msgs []*node.VoteMsg) []error {
-	errs := make([]error, 0)
-
-	for _, commitMsg := range msgs {
-		err := pbfter.GetCommit(commitMsg)
-		if err != nil {
-			errs = append(errs, err)
-		}
-	}
-
-	if len(errs) != 0 {
-		return errs
-	}
-
-	return nil
-}
-
-func (pbfter *Pbfter) GetReq(reqMsg *node.RequestMsg) error {
-	LogMsg(reqMsg)
-
-	// create a new state for the new consensus
-	err := pbfter.createStateForNewConsensus()
+// node sends prePrepare msg
+func (p *Pbfter) GetPrePrepare(msg *tp.PrePrepareMsg) (error) {
+	LogMsg(msg)
+	err := p.createStateForNewConsensus()
 	if err != nil {
-		log.Error("PBFTER: GetReq createStateForNewConsensus error")
-		return err
+		log.Error("[GetPrePrepare] createStateForNewConsensus error")
+		panic(err)
 	}
 
-	// start the consensus process
-	prePrepareMsg, err := pbfter.CurrentState.StartConsensus(reqMsg)
+	prePareMsg, err := p.CurrentState.PrePrepare(msg)
 	if err != nil {
-		log.Error("PBFTER: GetReq StartConsensus error")
-		return err
-	}
-
-	LogStage(fmt.Sprintf("Consensus Process (ViewID:%d)", pbfter.CurrentState.ViewID), false)
-
-	// send getPrePrepare message
-	if prePrepareMsg != nil {
-		pbfter.Broadcast(prePrepareMsg)
-		LogStage("Pre-prepare", true)
-	}
-
-	return nil
-}
-
-func (pbfter *Pbfter) GetPrePrepare(prePrepareMsg *node.PrePrepareMsg) error {
-	LogMsg(prePrepareMsg)
-
-	// create a new state
-	err := pbfter.createStateForNewConsensus()
-	if err != nil {
-		log.Error("PBFTER: GetPrePrepare createStateForNewConsensus error")
-		return err
-	}
-
-	prePareMsg, err := pbfter.CurrentState.PrePrepare(prePrepareMsg)
-	if err != nil {
-		log.Error("PBFTER: GetPrePrepare PrePrepare error")
-		return err
+		log.Error("[GetPrePrepare] PrePrepare error")
+		panic(err)
 	}
 
 	if prePareMsg != nil {
-		prePareMsg.NodeID = pbfter.NodeID
-		LogStage("Pre-prepare", true)
-		pbfter.Broadcast(prePareMsg)
-		LogStage("Prepare", false)
+		prePareMsg.NodeID = p.NodeID
+		LogStage("Pre-prepare", true, p.NodeID)
+		prePareMsgBytes, err := json.Marshal(*prePareMsg)
+		if err != nil {
+			return errors.New("[GetPrePrepare] prePareMsg marshal error!")
+		} else {
+			ctx, cancel := context.WithTimeout(context.Background(), types.GRPC_TIMEOUT)
+			_, pushErr := p.Push(ctx, &pb.ReqBody{Body:prePareMsgBytes})
+			if pushErr != nil {
+				panic(errors.New("[GetPrePrepare] push prePareMsgBytes error!"))
+			}
+			defer cancel()
+		}
+		LogStage("Prepare", false, p.NodeID)
+	} else {
+		panic(errors.New("[GetPrePrepare] get empty prePareMsg"))
 	}
-
 	return nil
 }
 
-func (pbfter *Pbfter) GetPrepare(prePareMsg *node.VoteMsg) error {
-	LogMsg(prePareMsg)
-	commitMsg, err := pbfter.CurrentState.Prepare(prePareMsg)
+func (state *State) PrePrepare(prePrepareMsg *tp.PrePrepareMsg) (*tp.PrepareMsg, error) {
+	// Get ReqMsgs and save it to its logs like the primary.
+	state.MsgLogs.ReqMsg = prePrepareMsg.Req
+
+	// Verify if v, n(a.k.a. sequenceID), d are correct.
+	if !state.verifyMsg(prePrepareMsg.ViewID, prePrepareMsg.SequenceID, prePrepareMsg.Digest) {
+		return nil, errors.New("pre-prepare message is corrupted")
+	}
+
+	// Change the stage to pre-prepared.
+	state.CurrentStage = PrePrepared
+
+	return &tp.PrepareMsg{
+		ViewID: state.ViewID,
+		SequenceID: prePrepareMsg.SequenceID,
+		Digest: prePrepareMsg.Digest,
+		MsgType: "PrepareMsg",
+	}, nil
+}
+
+// node sends prepare msg
+func (p *Pbfter) GetPrepare(msg *tp.PrepareMsg) (error) {
+	LogMsg(msg)
+
+	commitMsg, err := p.CurrentState.Prepare(msg)
 	if err != nil {
-		log.Error("PBFTER: GetPrepare Prepare error")
-		return err
+		log.Error("[GetPrepare] Prepare Error")
+		panic(err)
 	}
 
 	if commitMsg != nil {
-		commitMsg.NodeID = pbfter.NodeID
-		LogStage("Prepare", true)
-		pbfter.Broadcast(commitMsg)
-		LogStage("Commit", false)
+		commitMsg.NodeID = p.NodeID
+		LogStage("Prepare", true, p.NodeID)
+		commitMsgBytes, err := json.Marshal(*commitMsg)
+		if err != nil {
+			return errors.New("[GetPrepare] commitMsg marshal error!")
+		} else {
+			ctx, cancel := context.WithTimeout(context.Background(), types.GRPC_TIMEOUT)
+			_, pushErr := p.Push(ctx, &pb.ReqBody{Body:commitMsgBytes})
+			if pushErr != nil {
+				panic(errors.New("[GetPrepare] push commitMsg error!"))
+			}
+			defer cancel()
+		}
+		LogStage("Commit", false, p.NodeID)
+	} else {
+		panic(errors.New("[GetPrepare] get empty commitMsg"))
 	}
 
 	return nil
 }
 
-func (pbfter *Pbfter) GetCommit(commitMsg *node.VoteMsg) error {
-	LogMsg(commitMsg)
+func (state *State) Prepare(prepareMsg *tp.PrepareMsg) (*tp.CommitMsg, error)  {
+	if !state.verifyMsg(prepareMsg.ViewID, prepareMsg.SequenceID, prepareMsg.Digest) {
+		return nil, errors.New("prepare message is corrupted")
+	}
 
-	replyMsg, committedMsg, err := pbfter.CurrentState.Commit(commitMsg)
+	// Append msg to its logs
+	state.MsgLogs.PrepareMsgs[prepareMsg.NodeID] = prepareMsg
+
+	// Print current voting status
+	fmt.Printf("[Prepare-Vote]: %d\n", len(state.MsgLogs.PrepareMsgs))
+
+	if state.prepared() {
+		// Change the stage to prepared.
+		state.CurrentStage = Prepared
+
+		return &tp.CommitMsg{
+			ViewID:               state.ViewID,
+			SequenceID:           prepareMsg.SequenceID,
+			Digest:               prepareMsg.Digest,
+			MsgType:              "CommitMsg",
+		}, nil
+	}
+
+	return nil, errors.New("[Prepare] haven't received 2f+1 prepare msg")
+}
+
+// node sends commit msg
+func (p *Pbfter) GetCommit(msg *tp.CommitMsg) (error) {
+	LogMsg(msg)
+
+	replyMsg, committedReq, err := p.CurrentState.Commit(msg)
 	if err != nil {
-		log.Error("PBFTER: GetCommit Commit error")
-		return err
+		log.Error("[GetCommit] Commit Error")
+		panic(err)
 	}
 
 	if replyMsg != nil {
-		if committedMsg == nil {
-			log.Error("PBFTER: committed message is nil, even though the reply message is not nil")
+		if committedReq == nil {
 			return errors.New("committed message is nil, even though the reply message is not nil")
 		}
 
-		replyMsg.NodeID = pbfter.NodeID
+		replyMsg.NodeID = p.NodeID
+		p.CommittedMsgs = append(p.CommittedMsgs, committedReq)
 
-		// save the last version of committed messages to ndoe
-		pbfter.CommittedMsgs = append(pbfter.CommittedMsgs, committedMsg)
-		LogStage("Commit", true)
-		pbfter.Reply(replyMsg)
-		LogStage("Reply", true)
+		LogStage("Commit", true, p.NodeID)
+		LogStage("Reply", true, p.NodeID)
 	}
 
 	return nil
 }
 
-func (pbfter *Pbfter) Reply(msg *node.ReplyMsg) error {
-	jsonMsg, err := json.Marshal(msg)
-	if err != nil {
-		log.Error("PBFTER Reply json marshal error")
-		return err
+func (state *State) Commit(commitMsg *tp.CommitMsg) (*tp.ReplyMsg, *tp.PbftReq, error) {
+	if !state.verifyMsg(commitMsg.ViewID, commitMsg.SequenceID, commitMsg.Digest) {
+		return nil, nil, errors.New("commit message is corrupted")
 	}
 
-	// QUESTION
-	maxSoc := make(chan bool, types.MAX_SOCKETS)
-	maxSoc <- true
-	pbfter.sendGossip(pbfter.NodeTable[pbfter.Leader], jsonMsg, maxSoc)
+	// Append msg to its logs
+	state.MsgLogs.CommitMsgs[commitMsg.NodeID] = commitMsg
 
-	return nil
+	// Print current voting status
+	fmt.Printf("[Commit-Vote]: %d\n", len(state.MsgLogs.CommitMsgs))
+
+	if state.committed() {
+		// This node executes the requested operation locally and gets the result.
+		result := "Executed"
+
+		// Change the stage to prepared.
+		state.CurrentStage = Committed
+
+		return &tp.ReplyMsg{
+			ViewID:               state.ViewID,
+			Timestamp:            state.MsgLogs.ReqMsg.Timestamp,
+			ClientID:             state.MsgLogs.ReqMsg.ClientID,
+			Result:               result,
+			MsgType:              "ReplyMsg",
+		}, state.MsgLogs.ReqMsg, nil
+	}
+
+	return nil, nil, errors.New("[Commit] haven't received 2f+1 commit msg")
 }
 
-func (pbfter *Pbfter) createStateForNewConsensus() error {
-	// check if there is an ongoing consensus process
-	if pbfter.CurrentState != nil {
+func (p *Pbfter) createStateForNewConsensus() error {
+	if p.CurrentState != nil {
 		return errors.New("another consensus is ongoing")
 	}
 
-	// get the last sequence ID
-	var lastSequenceID int64
-	if len(pbfter.CommittedMsgs) == 0{
-		lastSequenceID = -1
+	var lastSeqID int64
+	if len(p.CommittedMsgs) == 0 {
+		lastSeqID = -1
 	} else {
-		lastSequenceID = pbfter.CommittedMsgs[len(pbfter.CommittedMsgs) - 1].SequenceID
+		lastSeqID = p.CommittedMsgs[len(p.CommittedMsgs) - 1].SequenceID
 	}
 
-	// calculate bad nodes tolerance
-	f := (len(pbfter.NodeTable) - 1) / 3
-
-	// create a new state
-	pbfter.CurrentState = node.CreateState(pbfter.ViewID, lastSequenceID, f)
-
-	LogStage("Create the replica status", true)
+	p.CurrentState = createState(p.ViewID, lastSeqID)
 
 	return nil
 }
 
-func (pbfter *Pbfter) Broadcast (msg interface{}) map[string]error {
-	errorMap := make(map[string]error)
-	maxSoc := make(chan bool, types.MAX_SOCKETS)
-	for nodeID, ip := range pbfter.NodeTable {
-		if nodeID == pbfter.NodeID {
-			continue
-		}
-
-		jsonMsg, err := json.Marshal(msg)
-		if err != nil {
-			errorMap[nodeID] = err
-			continue
-		}
-
-		maxSoc <- true // blocks if maxSoc is full
-		go pbfter.sendGossip(ip, jsonMsg, maxSoc)
+func createState (viewID int64, seqID int64) *State {
+	return &State{
+		ViewID:		    viewID,
+		MsgLogs:        &MsgLogs{
+			ReqMsg:      nil,
+			PrepareMsgs: make(map[string]*tp.PrepareMsg),
+			CommitMsgs:  make(map[string]*tp.CommitMsg),
+		},
+		LastSequenceID: seqID,
+		CurrentStage:   Idle,
 	}
-	if len(errorMap) == 0 {
-		return nil
-	} else {
-		return errorMap
+}
+
+func (state *State) StartConsensus(req *tp.PbftReq) (*tp.PrePrepareMsg, error) {
+	seqID := time.Now().UnixNano()
+
+	if state.LastSequenceID != -1 {
+		seqID = state.LastSequenceID + 1
+	}
+
+	req.SequenceID = seqID
+
+	state.MsgLogs.ReqMsg = req
+
+	digest, err := util.Digest(req)
+	if err != nil {
+		log.Error("Error happens when getting digest of request [StartConsensus]")
+		panic(err)
+	}
+
+	state.CurrentStage = PrePrepared
+
+	return &tp.PrePrepareMsg{
+		ViewID:               state.ViewID,
+		SequenceID:           seqID,
+		Digest:               digest,
+		Req:                  req,
+		MsgType:			  "PrePrepareMsg",
+	}, nil
+}
+
+func (state *State) verifyMsg(viewID int64, sequenceID int64, digestGot string) bool {
+	// Wrong view. That is, wrong configurations of peers to start the consensus.
+	if state.ViewID != viewID {
+		return false
+	}
+
+	// Check if the Primary sent fault sequence number. => Faulty primary.
+	// TODO: adopt upper/lower bound check.
+	if state.LastSequenceID != -1 {
+		if state.LastSequenceID >= sequenceID {
+			return false
+		}
+	}
+
+	digest, err := util.Digest(state.MsgLogs.ReqMsg)
+	if err != nil {
+		fmt.Println(err)
+		return false
+	}
+
+	// Check digest.
+	if digestGot != digest {
+		return false
+	}
+
+	return true
+}
+
+func CreatePbfter(nodeID string, viewID int64, ip string, allIps []string) *Pbfter {
+	newPbfter := &Pbfter{
+		Gossiper:      Gossiper{
+			ip:           ip,
+			peers:        make([]string, 0),
+			peersLock:    sync.Mutex{},
+			hashes:       make(map[string]bool),
+			hashesLock:   sync.Mutex{},
+			poked:        make(map[string]bool),
+			pokedLock:    sync.Mutex{},
+			requests:     make([]string, 0),
+			requestsLock: sync.Mutex{},
+		},
+		NodeID:        nodeID,
+		ViewID:        viewID,
+		CurrentState:  nil,
+		CommittedMsgs: make([]*tp.PbftReq, 0),
+		MsgBuffer:     &MsgBuffer{
+			ReqMsgs:        make([]*tp.PbftReq, 0),
+			PrePrepareMsgs: make([]*tp.PrePrepareMsg, 0),
+			PrepareMsgs:    make([]*tp.PrepareMsg, 0),
+			CommitMsgs:     make([]*tp.CommitMsg, 0),
+		},
+		MsgDelivery:   make(chan interface{}),
+	}
+
+	return newPbfter
+}
+
+func (p *Pbfter) PbfterUp() {
+	lis, err := net.Listen("tcp", p.ip)
+	if err != nil {
+		log.WithField("ip", p.ip).Error("Cannot listen on tcp [pbfter]")
+		panic(err)
+	}
+
+	grpcServer := grpc.NewServer()
+
+	pb.RegisterGossipServer(grpcServer, p)
+	pb.RegisterPbftServer(grpcServer, p)
+	reflection.Register(grpcServer)
+
+	if err := grpcServer.Serve(lis); err != nil {
+		log.WithField("ip", p.ip).Error("Cannot serve [pbfter]")
+		panic(err)
 	}
 }
 
 func LogMsg(msg interface{}) {
 	switch msg.(type) {
-	case *node.RequestMsg:
-		reqMsg := msg.(*node.RequestMsg)
-		log.WithFields(log.Fields{
-			"msgType": "REQUEST",
-			"ClientID": reqMsg.ClientID,
-			"TimeStamp": reqMsg.Timestamp,
-			"Operation": reqMsg.Operation,
-		}).Info("Log REQUEST message")
-	case *node.PrePrepareMsg:
-		prePrepareMsg := msg.(*node.PrePrepareMsg)
-		log.WithFields(log.Fields{
-			"msgType": "PREPREPARE",
-			"ClientID": prePrepareMsg.RequestMsg.ClientID,
-			"TimeStamp": prePrepareMsg.RequestMsg.Timestamp,
-			"Operation": prePrepareMsg.RequestMsg.Operation,
-			"SequenceID": prePrepareMsg.SequenceID,
-		}).Info("Log PREPREPARE message")
-	case *node.VoteMsg:
-		voteMsg := msg.(*node.VoteMsg)
-		if voteMsg.MsgType == node.PrepareMsg {
-			log.WithFields(log.Fields{
-				"msgType": "PREPARE",
-				"ViewID": voteMsg.ViewID,
-				"NodeID": voteMsg.NodeID,
-				"SequenceID": voteMsg.SequenceID,
-			}).Info("Log PREPARE message")
-		} else if voteMsg.MsgType == node.CommitMsg {
-			log.WithFields(log.Fields{
-				"msgType": "COMMIT",
-				"ViewID": voteMsg.ViewID,
-				"NodeID": voteMsg.NodeID,
-				"SequenceID": voteMsg.SequenceID,
-			}).Info("Log COMMIT message")
-		}
+	case *tp.PbftReq:
+		reqMsg := msg.(*tp.PbftReq)
+		fmt.Printf("[REQUEST] ClientID: %s, Timestamp: %d, Operation: %s\n", reqMsg.ClientID, reqMsg.Timestamp, reqMsg.Operation)
+	case *tp.PrePrepareMsg:
+		prePrepareMsg := msg.(*tp.PrePrepareMsg)
+		fmt.Printf("[PREPREPARE] ClientID: %s, Operation: %s, SequenceID: %d\n", prePrepareMsg.Req.ClientID, prePrepareMsg.Req.Operation, prePrepareMsg.SequenceID)
+	case *tp.PrepareMsg:
+		prePareMsg := msg.(*tp.PrepareMsg)
+		fmt.Printf("[PREPARE] NodeID: %s\n", prePareMsg.NodeID)
+	case *tp.CommitMsg:
+		commitMsg := msg.(*tp.CommitMsg)
+		fmt.Printf("[COMMIT] NodeID: %s\n", commitMsg.NodeID)
 	}
 }
 
-func LogStage(stage string, isDone bool) {
+func LogStage(stage string, isDone bool, nodeID string) {
 	if isDone {
-		log.Info("[STAGE-DONE] %s\n", stage)
+		fmt.Printf("[STAGE-DONE] %s nodeID: %v\n", stage, nodeID)
 	} else {
-		log.Info("[STAGE-BEGIN] %s\n", stage)
+		fmt.Printf("[STAGE-BEGIN] %s nodeID: %v\n", stage, nodeID)
 	}
+}
+
+func (state *State) prepared() bool {
+	if state.MsgLogs.ReqMsg == nil {
+		return false
+	}
+
+	if len(state.MsgLogs.PrepareMsgs) < (2*f + 1) { // 2f + 1 (itself)
+		return false
+	}
+
+	return true
+}
+
+func (state *State) committed() bool {
+	if !state.prepared() {
+		return false
+	}
+
+	if len(state.MsgLogs.CommitMsgs) < (2*f + 1) { // 2f + 1 (itself)
+		return false
+	}
+
+	return true
 }
