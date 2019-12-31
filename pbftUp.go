@@ -20,9 +20,7 @@ func main() {
 		for _, peer := range peers {
 			pbfter.AddPeer(peer)
 		}
-
 		go pbfter.GetMsgFromGossip()
-		
 		if i == len(nodes.Nodes) - 1 {
 			pbfter.PbfterUp()
 		} else {

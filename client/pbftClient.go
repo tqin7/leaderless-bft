@@ -3,8 +3,10 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	pb "github.com/spockqin/leaderless-bft/proto"
+	tp "github.com/spockqin/leaderless-bft/types"
 	"github.com/spockqin/leaderless-bft/tests/network"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -67,7 +69,21 @@ func main() {
 				fmt.Printf("err happens when converting timestamp to int64")
 				panic(err)
 			}
-			_, err = mainClient.GetReq(context.Background(), &pb.PbftReq{ClientID: elements[0], Operation: elements[1], Timestamp: timeStamp})
+			req := &tp.PbftReq{
+				ClientID:  	elements[0],
+				Operation:  elements[1],
+				Timestamp:  timeStamp,
+				SequenceID: 0,
+				MsgType:    "PbftReq",
+			}
+
+			reqBytes, err := json.Marshal(req)
+			if err != nil {
+				log.Error("client marshak request error!")
+				panic(err)
+			}
+
+			_, err = mainClient.GetReq(context.Background(), &pb.ReqBody{Body:reqBytes})
 			if err != nil {
 				log.Error("Client sendReq error!")
 				panic(err)
