@@ -24,13 +24,17 @@ if [[ "$OSTYPE" == "darwin"* ]]
 then
 	env GOOS=darwin GOARCH=amd64 go build -o ./cluster/gossipUp ./gossipUp.go
 	env GOOS=darwin GOARCH=amd64 go build -o ./cluster/snowballUp ./snowballUp.go
+	env GOOS=darwin GOARCH=amd64 go build -o ./cluster/pbftUp ./pbftUp.go
 	env GOOS=darwin GOARCH=amd64 go build -o ./cluster/clients/gossipClient ./client/gossipClient.go
 	env GOOS=darwin GOARCH=amd64 go build -o ./cluster/clients/snowballClient ./client/snowballClient.go
+	env GOOS=darwin GOARCH=amd64 go build -o ./cluster/clients/pbftClient ./client/pbftClient.go
 
 else
 	env GOOS=linux GOARCH=amd64 go build -o ./cluster/gossipUp ./gossipUp.go
 	env GOOS=linux GOARCH=amd64 go build -o ./cluster/snowballUp ./snowballUp.go
+	env GOOS=linux GOARCH=amd64 go build -o ./cluster/pbftUp ./pbftUp.go
 	env GOOS=linux GOARCH=amd64 go build -o ./cluster/clients/gossipClient ./client/gossipClient.go
 	env GOOS=linux GOARCH=amd64 go build -o ./cluster/clients/snowballClient ./client/snowballClient.go
+	env GOOS=linux GOARCH=amd64 go build -o ./cluster/clients/pbftClient ./client/pbftClient.go
 fi
 echo -e 'Done\n'

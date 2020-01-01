@@ -58,8 +58,8 @@ type Pbfter struct {
 const f = 1;
 
 func (p *Pbfter) GetReq(ctx context.Context, request *pb.ReqBody) (*pb.Void, error) {
-	var req *tp.PbftReq
-	err := json.Unmarshal(request.GetBody(), req)
+	var req tp.PbftReq
+	err := json.Unmarshal(request.GetBody(), &req)
 	if err != nil {
 		log.Error("Error happens when unmarshal request [GetReq]")
 	}
@@ -71,7 +71,7 @@ func (p *Pbfter) GetReq(ctx context.Context, request *pb.ReqBody) (*pb.Void, err
 		return &pb.Void{}, err
 	}
 
-	prePrepareMsg, err := p.CurrentState.StartConsensus(req)
+	prePrepareMsg, err := p.CurrentState.StartConsensus(&req)
 	if err != nil {
 		log.Error("Error happens when starting consensus [SendReq]")
 	}
@@ -187,8 +187,7 @@ func (p *Pbfter) GetPrepare(msg *tp.PrepareMsg) (error) {
 
 	commitMsg, err := p.CurrentState.Prepare(msg)
 	if err != nil {
-		log.Error("[GetPrepare] Prepare Error")
-		panic(err)
+		log.Info(err)
 	}
 
 	if commitMsg != nil {
@@ -206,16 +205,16 @@ func (p *Pbfter) GetPrepare(msg *tp.PrepareMsg) (error) {
 			defer cancel()
 		}
 		LogStage("Commit", false, p.NodeID)
-	} else {
-		panic(errors.New("[GetPrepare] get empty commitMsg"))
 	}
+	// commitMsg == nil means that it haven't received 2f+1 prepare msg
 
 	return nil
 }
 
 func (state *State) Prepare(prepareMsg *tp.PrepareMsg) (*tp.CommitMsg, error)  {
 	if !state.verifyMsg(prepareMsg.ViewID, prepareMsg.SequenceID, prepareMsg.Digest) {
-		return nil, errors.New("prepare message is corrupted")
+		log.Error("prepare message is corrupted")
+		panic("prepare message is corrupted")
 	}
 
 	// Append msg to its logs
@@ -245,8 +244,7 @@ func (p *Pbfter) GetCommit(msg *tp.CommitMsg) (error) {
 
 	replyMsg, committedReq, err := p.CurrentState.Commit(msg)
 	if err != nil {
-		log.Error("[GetCommit] Commit Error")
-		panic(err)
+		log.Info(err)
 	}
 
 	if replyMsg != nil {
@@ -266,7 +264,8 @@ func (p *Pbfter) GetCommit(msg *tp.CommitMsg) (error) {
 
 func (state *State) Commit(commitMsg *tp.CommitMsg) (*tp.ReplyMsg, *tp.PbftReq, error) {
 	if !state.verifyMsg(commitMsg.ViewID, commitMsg.SequenceID, commitMsg.Digest) {
-		return nil, nil, errors.New("commit message is corrupted")
+		log.Error("commit message is corrupted")
+		panic("commit message is corrupted")
 	}
 
 	// Append msg to its logs

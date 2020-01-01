@@ -5,64 +5,53 @@ import (
 	"errors"
 	"strings"
 	tp "github.com/spockqin/leaderless-bft/types"
+	"time"
 )
 
 func (p *Pbfter) GetMsgFromGossip(){
-	p.requestsLock.Lock()
-	defer p.requestsLock.Unlock()
-	for _, req :=range p.requests {
-		if strings.Contains(req, "PbftReq") {
-			var pbftReq tp.PbftReq
-			err := json.Unmarshal([]byte(req), &pbftReq)
-			if err != nil {
-				panic(errors.New("[GetMsgFromGossip] unmarshal PbftReq error"))
+	for {
+		p.requestsLock.Lock()
+
+		for _, req :=range p.requests {
+			if strings.Contains(req, "PrePrepareMsg") {
+				var prePrepareMsg tp.PrePrepareMsg
+				err := json.Unmarshal([]byte(req), &prePrepareMsg)
+				if err != nil {
+					panic(errors.New("[GetMsgFromGossip] unmarshal PrePrepareMsg error"))
+				}
+				p.RouteMsg(&prePrepareMsg)
+			} else if strings.Contains(req, "PrepareMsg") {
+				var prePareMsg tp.PrepareMsg
+				err := json.Unmarshal([]byte(req), &prePareMsg)
+				if err != nil {
+					panic(errors.New("[GetMsgFromGossip] unmarshal PrepareMsg error"))
+				}
+				p.RouteMsg(&prePareMsg)
+			} else if strings.Contains(req, "CommitMsg") {
+				var commitMsg tp.CommitMsg
+				err := json.Unmarshal([]byte(req), &commitMsg)
+				if err != nil {
+					panic(errors.New("[GetMsgFromGossip] unmarshal CommitMsg error"))
+				}
+				p.RouteMsg(&commitMsg)
+			} else if strings.Contains(req, "ReplyMsg") {
+				var replyMsg tp.ReplyMsg
+				err := json.Unmarshal([]byte(req), &replyMsg)
+				if err != nil {
+					panic(errors.New("[GetMsgFromGossip] unmarshal ReplyMsg error"))
+				}
+				p.RouteMsg(&replyMsg)
 			}
-			p.RouteMsg(&pbftReq)
-		} else if strings.Contains(req, "PrePrepareMsg") {
-			var prePrepareMsg tp.PrePrepareMsg
-			err := json.Unmarshal([]byte(req), &prePrepareMsg)
-			if err != nil {
-				panic(errors.New("[GetMsgFromGossip] unmarshal PrePrepareMsg error"))
-			}
-			p.RouteMsg(&prePrepareMsg)
-		} else if strings.Contains(req, "PrepareMsg") {
-			var prePareMsg tp.PrepareMsg
-			err := json.Unmarshal([]byte(req), &prePareMsg)
-			if err != nil {
-				panic(errors.New("[GetMsgFromGossip] unmarshal PrepareMsg error"))
-			}
-			p.RouteMsg(&prePareMsg)
-		} else if strings.Contains(req, "CommitMsg") {
-			var commitMsg tp.CommitMsg
-			err := json.Unmarshal([]byte(req), &commitMsg)
-			if err != nil {
-				panic(errors.New("[GetMsgFromGossip] unmarshal CommitMsg error"))
-			}
-			p.RouteMsg(&commitMsg)
-		} else if strings.Contains(req, "ReplyMsg") {
-			var replyMsg tp.ReplyMsg
-			err := json.Unmarshal([]byte(req), &replyMsg)
-			if err != nil {
-				panic(errors.New("[GetMsgFromGossip] unmarshal ReplyMsg error"))
-			}
-			p.RouteMsg(&replyMsg)
 		}
+
+		p.requests = make([]string, 0)
+		p.requestsLock.Unlock()
+		time.Sleep(3 * time.Second)
 	}
-	p.requests = make([]string, 0)
 }
 
 func (p *Pbfter) RouteMsg(msg interface{}) []error{
 	switch msg.(type) {
-	case *tp.PbftReq:
-		if p.CurrentState == nil {
-			msgs := make([]*tp.PbftReq, len(p.MsgBuffer.ReqMsgs))
-			copy(msgs, p.MsgBuffer.ReqMsgs)
-			msgs = append(msgs, msg.(*tp.PbftReq))
-			p.MsgBuffer.ReqMsgs = make([]*tp.PbftReq, 0)
-			p.MsgDelivery <- msgs
-		} else {
-			p.MsgBuffer.ReqMsgs = append(p.MsgBuffer.ReqMsgs, msg.(*tp.PbftReq))
-		}
 	case *tp.PrePrepareMsg:
 		if p.CurrentState == nil {
 			msgs := make([]*tp.PrePrepareMsg, len(p.MsgBuffer.PrePrepareMsgs))
