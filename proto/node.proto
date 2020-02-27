@@ -10,27 +10,6 @@ service Gossip {
     rpc GetAllRequests (Void) returns (Requests) {}
 }
 
-service Snowball {
-    //gets a vote on this server's opinion
-    rpc GetVote (Void) returns (ReqId) {}
-    //a client sends request using this method
-    rpc SendReq (ReqBody) returns (Void) {}
-
-    //gets ordered requests (consensus reached whp)
-    rpc GetOrderedReqs (Void) returns (Requests) {}
-}
-
-service Pbft {
-    // client sends request
-    rpc GetReq (ReqBody) returns (Void) {}
-    // node sends prePrepare msg
-//    rpc GetPrePrepare (ReqBody) returns (Void) {}
-//    // node sends prepare msg
-//    rpc GetPrepare (ReqBody) returns (Void) {}
-//    // node sends commit msg
-//    rpc GetCommit (ReqBody) returns (Void) {}
-}
-
 message Requests {
     repeated string requests = 1;
 }
@@ -48,3 +27,28 @@ message Bool {
 }
 
 message Void {}
+
+service Snowball {
+    //get vote from this node
+    rpc GetVote (SeqNumMsg) returns (SeqNumMsg) {}
+    //a client sends request using this method
+    rpc SendReq (ReqBody) returns (Void) {}
+
+    //rpc GetSeqNum (ReqBody) returns (SeqNumMsg) {}
+}
+
+message SeqNumMsg {
+    uint64 seq_num = 1;
+    bytes req_hash = 2; // hash of the corresponding request
+}
+
+service Pbft {
+    // client sends request
+    rpc GetReq (ReqBody) returns (Void) {}
+    // node sends prePrepare msg
+//    rpc GetPrePrepare (ReqBody) returns (Void) {}
+//    // node sends prepare msg
+//    rpc GetPrepare (ReqBody) returns (Void) {}
+//    // node sends commit msg
+//    rpc GetCommit (ReqBody) returns (Void) {}
+}

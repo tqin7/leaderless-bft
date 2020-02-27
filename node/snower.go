@@ -1,15 +1,15 @@
 package proto
 
 import (
-	"math/rand"
+	// "math/rand"
 	"context"
 	pb "github.com/spockqin/leaderless-bft/proto"
-	"errors"
+	// "errors"
 	"github.com/spockqin/leaderless-bft/util"
 	"google.golang.org/grpc"
 	log "github.com/sirupsen/logrus"
 	"net"
-	"bytes"
+	// "bytes"
 	"github.com/spockqin/leaderless-bft/types"
 	"fmt"
 	"sync"
@@ -17,89 +17,62 @@ import (
 
 type Snower struct {
 	Gossiper
-	allIps []string //ip of every node in the network
-	confidences ConfidenceMap //storing num of queries that yield each output
-	confidencesLock sync.Mutex
-	ordered []string //an ordered lists of requests, i.e. ones with consensus
-	proposal []byte //the hash of what's believed to be the next request
+	allIps []string // ip of every node in the network
+	confidences ConfidenceMap // storing num of queries that yield each output
+	confidencesLock sync.Mutex // lock on above confidences map
+	seqNum uint64 // current sequence number, non-decreasing
+	finalSeqNums map[string]uint64 // map request hashes (stringified) to their final sequence numbers
 }
 
-//return what this node thinks is the next request
-func (s *Snower) GetVote(ctx context.Context, req *pb.Void) (*pb.ReqId, error) {
-	s.requestsLock.Lock()
-	reqLen := len(s.requests)
-	s.requestsLock.Unlock()
-
-	if reqLen == 0 {
-		return &pb.ReqId{Hash:nil}, errors.New("no known request")
+/* return this node's opinion on sequence number */
+func (s *Snower) GetVote(ctx context.Context, msg *pb.SeqNumMsg) (*pb.SeqNumMsg, error) {
+	// return existing seq num if it's determined already
+	if seqNum, exists := s.finalSeqNums[string(msg.ReqHash)]; exists {
+		return &pb.SeqNumMsg{SeqNum: seqNum, ReqHash: msg.ReqHash}, nil
+	} else {
+		s.seqNum = msg.SeqNum
+		go s.performQueries(msg)
 	}
 
-	//if s doesn't have a proposal yet, set proposal and initiate query
-	//otherwise, simply return proposal
-	if s.proposal == nil {
-		s.setProposal()
-		go s.performQueries()
-	}
-
-	return &pb.ReqId{Hash:s.proposal}, nil
+	return &pb.SeqNumMsg{SeqNum: s.seqNum, ReqHash: msg.ReqHash}, nil
 }
 
 func (s *Snower) SendReq(ctx context.Context, req *pb.ReqBody) (*pb.Void, error) {
-	s.Push(ctx, req)
+	// check if request is already known
+	reqHash := util.HashBytes(req.Body)
 
-	s.setProposal()
-	go s.performQueries()
+	if !s.hashes[string(reqHash)] {
+		s.Push(ctx, req)
+
+		s.seqNum += 1
+		seqNumProposal := pb.SeqNumMsg{SeqNum: s.seqNum, ReqHash: reqHash}
+		go s.performQueries(&seqNumProposal)
+	}
 
 	return &pb.Void{}, nil
 }
 
-func (s *Snower) GetOrderedReqs(ctx context.Context, req *pb.Void) (*pb.Requests, error) {
-	return &pb.Requests{Requests: s.ordered}, nil
-}
-
-func (s *Snower) setProposal() {
-	s.requestsLock.Lock()
-	randomRequest := s.requests[rand.Intn(len(s.requests))]
-	s.requestsLock.Unlock()
-
-	s.proposal = util.HashBytes([]byte(randomRequest)) //random request for now
-}
-
-func (s *Snower) performQueries() {
+func (s *Snower) performQueries(msg *pb.SeqNumMsg) {
 	for i := 0; i < types.SNOWBALL_SAMPLE_ROUNDS; i++ {
-		s.getMajorityVote()
+		go s.getMajorityVote(msg)
 	}
-	//most confident request and its index
-	bestReq, bestIndex := s.findReqFromHash(s.proposal)
-	fmt.Println("I'm most confident in: ", bestReq, s.confidences.Get(bestReq))
+
+	fmt.Println("I'm most confident in: ", s.seqNum, "with votes ", s.confidences.Get(s.seqNum))
 	log.WithFields(log.Fields{
 		"ip": s.ip,
-		"majority": bestReq,
-		//"result": s.confidences,
+		"majority": s.seqNum,
 	}).Info("Completed one entire query")
-	s.ordered = append(s.ordered, bestReq)
-	s.confidencesLock.Lock()
-	fmt.Println("removing ", bestReq, s.ip)
-	s.confidences.RemoveKey(bestReq)
-	s.confidencesLock.Unlock()
-	s.requests = util.RemoveOneFromArr(s.requests, bestIndex)
-	s.proposal = nil
-}
 
-func (s *Snower) findReqFromHash(hash []byte) (string, int) {
-	for i, request := range s.requests {
-		if bytes.Compare(util.HashBytes([]byte(request)), hash) == 0 {
-			return request, i
-		}
-	}
-	return "", -1
+	s.finalSeqNums[string(msg.ReqHash)] = s.seqNum
+	// s.confidences = CreateConfidenceMap()
 }
 
 //queries random subset, get majority, update confidence and proposal
-func (s *Snower) getMajorityVote() string {
-	sampleSize := 3
+func (s *Snower) getMajorityVote(msg *pb.SeqNumMsg) uint64 {
+	sampleSize := 2		//TODO: determine sample size as sqrt?
 	networkSubset := util.UniqueRandomSample(s.allIps, sampleSize)
 	votes := CreateConfidenceMap()
+
 	for _, ip := range networkSubset {
 		conn, err := grpc.Dial(ip, grpc.WithInsecure())
 		if err != nil {
@@ -111,7 +84,7 @@ func (s *Snower) getMajorityVote() string {
 			continue
 		}
 		client := pb.NewSnowballClient(conn)
-		vote, err := client.GetVote(context.Background(), &pb.Void{})
+		vote, err := client.GetVote(context.Background(), msg)
 		conn.Close()
 		if err != nil {
 			log.WithFields(log.Fields{
@@ -125,21 +98,25 @@ func (s *Snower) getMajorityVote() string {
 			"ip": s.ip,
 			"from": ip,
 		}).Info("Got vote")
-		votes.IncreaseConfidence(string(vote.Hash))
+		votes.IncreaseConfidence(vote.SeqNum)
 	}
 
-	majorityHashStr, _ := votes.GetKeyWithMostConfidence()
-	majorityHash := []byte(majorityHashStr)
+	majorityValue, _ := votes.GetKeyWithMostConfidence()
 
 	s.confidencesLock.Lock()
-	majorityReq, _ := s.findReqFromHash(majorityHash)
-	s.confidences.IncreaseConfidence(majorityReq)
-	if s.confidences.Get(majorityReq) > s.confidences.Get(string(s.proposal)) {
-		s.proposal = majorityHash
+	s.confidences.IncreaseConfidence(majorityValue)
+	if s.confidences.Get(majorityValue) > s.confidences.Get(s.seqNum) {
+		s.seqNum = majorityValue
 	}
 	s.confidencesLock.Unlock()
 
-	return majorityHashStr
+	return majorityValue
+}
+
+func (s *Snower) completeRequest(reqId *pb.ReqId) {
+	delete(s.finalSeqNums, string(reqId.Hash))
+	delete(s.hashes, string(reqId.Hash))
+	//TODO: remove request from s.requests
 }
 
 func CreateSnower(ip string, allIps []string) *Snower {
@@ -147,12 +124,13 @@ func CreateSnower(ip string, allIps []string) *Snower {
 	newSnower.ip = ip
 	newSnower.peers = make([]string, 0)
 	newSnower.hashes = make(map[string]bool)
+	newSnower.poked = make(map[string]bool)
 	newSnower.requests = make([]string, 0)
 
 	newSnower.allIps = allIps
 	newSnower.confidences = CreateConfidenceMap()
-	newSnower.ordered = make([]string, 0)
-	newSnower.proposal = nil
+	newSnower.seqNum = 0
+	newSnower.finalSeqNums = make(map[string]uint64)
 
 	return newSnower
 }
