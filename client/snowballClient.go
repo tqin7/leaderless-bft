@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"os"
 	"fmt"
+	"regexp"
 	"google.golang.org/grpc"
 	log "github.com/sirupsen/logrus"
 	pb "github.com/spockqin/leaderless-bft/proto"
+	"github.com/spockqin/leaderless-bft/util"
 	"context"
 	"github.com/spockqin/leaderless-bft/tests/network"
 )
@@ -33,6 +35,7 @@ func main() {
 	defer mainConn.Close()
 
 	mainClient := pb.NewSnowballClient(mainConn)
+	numPattern, _ := regexp.Compile("get num (.+)")
 
 	for {
 		// read in input from stdin
@@ -58,7 +61,9 @@ func main() {
 				fmt.Println(ip, "-", requests.Requests)
 				conn.Close()
 			}
-		case msgStr == "get ordered":
+		case numPattern.MatchString(msgStr):
+			reqBytes := []byte(numPattern.FindStringSubmatch(msgStr)[1])
+			seqNumRequest := pb.SeqNumMsg{SeqNum: 0, ReqHash: util.HashBytes(reqBytes)}
 			for _, ip := range snowers {
 				conn, err := grpc.Dial(ip, grpc.WithInsecure())
 				if err != nil {
@@ -69,8 +74,8 @@ func main() {
 					continue
 				}
 				c := pb.NewSnowballClient(conn)
-				requests, _ := c.GetOrderedReqs(context.Background(), &pb.Void{})
-				fmt.Println(ip, "-", requests.Requests)
+				seqNumRes, _ := c.GetVote(context.Background(), &seqNumRequest)
+				fmt.Println(ip, "-", seqNumRes.SeqNum)
 				conn.Close()
 			}
 		default:
