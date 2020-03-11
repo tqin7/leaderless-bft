@@ -70,6 +70,7 @@ func (s *Snower) performQueries(msg *pb.SeqNumMsg) {
 //queries random subset, get majority, update confidence and proposal
 func (s *Snower) getMajorityVote(msg *pb.SeqNumMsg) uint64 {
 	sampleSize := 2		//TODO: determine sample size as sqrt?
+	var alpha uint = 1 // TODO: alpha must be in (k/2, k]
 	networkSubset := util.UniqueRandomSample(s.allIps, sampleSize)
 	votes := CreateConfidenceMap()
 
@@ -101,16 +102,29 @@ func (s *Snower) getMajorityVote(msg *pb.SeqNumMsg) uint64 {
 		votes.IncreaseConfidence(vote.SeqNum)
 	}
 
-	majorityValue, _ := votes.GetKeyWithMostConfidence()
-
-	s.confidencesLock.Lock()
-	s.confidences.IncreaseConfidence(majorityValue)
-	if s.confidences.Get(majorityValue) > s.confidences.Get(s.seqNum) {
-		s.seqNum = majorityValue
+	for seq := range votes.kvMap {
+		if votes.kvMap[seq] >= alpha {
+			s.confidencesLock.Lock()
+			s.confidences.IncreaseConfidence(seq)
+			if s.confidences.Get(seq) > s.confidences.Get(s.seqNum) {
+				s.seqNum = seq
+			}
+			s.confidencesLock.Unlock()
+		}
 	}
-	s.confidencesLock.Unlock()
 
-	return majorityValue
+	return s.seqNum
+
+	//majorityValue, _ := votes.GetKeyWithMostConfidence()
+	//
+	//s.confidencesLock.Lock()
+	//s.confidences.IncreaseConfidence(majorityValue)
+	//if s.confidences.Get(majorityValue) > s.confidences.Get(s.seqNum) {
+	//	s.seqNum = majorityValue
+	//}
+	//s.confidencesLock.Unlock()
+
+	//return majorityValue
 }
 
 func (s *Snower) completeRequest(reqId *pb.ReqId) {
