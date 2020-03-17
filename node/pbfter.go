@@ -245,9 +245,10 @@ func (p *Pbfter) GetCommit(msg *tp.CommitMsg) (error) {
 	if err != nil {
 		fmt.Println("GetCommit Error")
 		log.Error(err)
-	} else {
-		p.CurrentState = nil
 	}
+	//else {
+	//	p.CurrentState = nil
+	//}
 
 	if replyMsg != nil {
 		if committedReq == nil {
