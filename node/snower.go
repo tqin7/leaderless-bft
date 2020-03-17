@@ -88,6 +88,8 @@ func (s *Snower) getMajorityVote(msg *pb.SeqNumMsg, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	sampleSize := 4		//TODO: determine sample size as sqrt?
+	var alpha uint = 1 // TODO: alpha must be in (k/2, k]
+
 	networkSubset := util.UniqueRandomSample(s.allIps, sampleSize)
 	votes := CreateConfidenceMap()
 
@@ -123,8 +125,10 @@ func (s *Snower) getMajorityVote(msg *pb.SeqNumMsg, wg *sync.WaitGroup) {
 
 	if votes.Size() != 0 {
 		fmt.Println("votes map: ", votes.kvMap)
-		majorityValue, _ := votes.GetKeyWithMostConfidence()
-		s.confidences.IncreaseConfidence(majorityValue)
+		majorityValue, majorityNumVotes := votes.GetKeyWithMostConfidence()
+		if majorityNumVotes >= alpha {
+			s.confidences.IncreaseConfidence(majorityValue)
+		}
 	}
 }
 
