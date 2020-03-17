@@ -38,17 +38,15 @@ service Snowball {
 }
 
 message SeqNumMsg {
-    uint64 seq_num = 1;
+    int64 seq_num = 1;
     bytes req_hash = 2; // hash of the corresponding request
 }
 
 service Pbft {
     // client sends request
     rpc GetReq (ReqBody) returns (Void) {}
-    // node sends prePrepare msg
-//    rpc GetPrePrepare (ReqBody) returns (Void) {}
-//    // node sends prepare msg
-//    rpc GetPrepare (ReqBody) returns (Void) {}
-//    // node sends commit msg
-//    rpc GetCommit (ReqBody) returns (Void) {}
+}
+
+service Lbft {
+    rpc LSendReq (ReqBody) returns (Void) {}
 }

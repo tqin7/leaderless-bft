@@ -5,11 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Chazzzzzzz/test-leaderless/types"
 	log "github.com/sirupsen/logrus"
 	pb "github.com/spockqin/leaderless-bft/proto"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/reflection"
+	// "google.golang.org/grpc/reflection"
 	"net"
 	"sync"
 	"time"
@@ -108,7 +107,7 @@ func (p *Pbfter) ResolveMsg() {
 			for _, msg := range msgs.([]*tp.PrepareMsg) {
 				err := p.GetPrepare(msg)
 				if err != nil {
-					log.Error("[ResolveMsg] resolve PrePrepare Error")
+					log.Error("[ResolveMsg] resolve Prepare Error")
 					panic(-1)
 				}
 			}
@@ -116,7 +115,7 @@ func (p *Pbfter) ResolveMsg() {
 			for _, msg := range msgs.([]*tp.CommitMsg) {
 				err := p.GetCommit(msg)
 				if err != nil {
-					log.Error("[ResolveMsg] resolve PrePrepare Error")
+					log.Error("[ResolveMsg] resolve Commit Error")
 					panic(-1)
 				}
 			}
@@ -147,7 +146,7 @@ func (p *Pbfter) GetPrePrepare(msg *tp.PrePrepareMsg) (error) {
 		if err != nil {
 			return errors.New("[GetPrePrepare] prePareMsg marshal error!")
 		} else {
-			ctx, cancel := context.WithTimeout(context.Background(), types.GRPC_TIMEOUT)
+			ctx, cancel := context.WithTimeout(context.Background(), tp.GRPC_TIMEOUT)
 			_, pushErr := p.Push(ctx, &pb.ReqBody{Body:prePareMsgBytes})
 			if pushErr != nil {
 				panic(errors.New("[GetPrePrepare] push prePareMsgBytes error!"))
@@ -197,7 +196,7 @@ func (p *Pbfter) GetPrepare(msg *tp.PrepareMsg) (error) {
 		if err != nil {
 			return errors.New("[GetPrepare] commitMsg marshal error!")
 		} else {
-			ctx, cancel := context.WithTimeout(context.Background(), types.GRPC_TIMEOUT)
+			ctx, cancel := context.WithTimeout(context.Background(), tp.GRPC_TIMEOUT)
 			_, pushErr := p.Push(ctx, &pb.ReqBody{Body:commitMsgBytes})
 			if pushErr != nil {
 				panic(errors.New("[GetPrepare] push commitMsg error!"))
@@ -244,7 +243,10 @@ func (p *Pbfter) GetCommit(msg *tp.CommitMsg) (error) {
 
 	replyMsg, committedReq, err := p.CurrentState.Commit(msg)
 	if err != nil {
-		log.Info(err)
+		fmt.Println("GetCommit Error")
+		log.Error(err)
+	} else {
+		p.CurrentState = nil
 	}
 
 	if replyMsg != nil {
@@ -419,7 +421,7 @@ func (p *Pbfter) PbfterUp() {
 
 	pb.RegisterGossipServer(grpcServer, p)
 	pb.RegisterPbftServer(grpcServer, p)
-	reflection.Register(grpcServer)
+	// reflection.Register(grpcServer)
 
 	if err := grpcServer.Serve(lis); err != nil {
 		log.WithField("ip", p.ip).Error("Cannot serve [pbfter]")

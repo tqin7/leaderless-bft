@@ -13,6 +13,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"regexp"
+	"github.com/spockqin/leaderless-bft/util"
 )
 
 func main() {
@@ -20,13 +22,13 @@ func main() {
 	var nodes network.Nodes
 	network.ReadNetworkConfig(&nodes, "../tests/network/config.json")
 
-	var pbfters []string
+	var lbfters []string
 	for _, node := range nodes.Nodes {
-		pbfters = append(pbfters, node.Ip)
+		lbfters = append(lbfters, node.Ip)
 	}
 
 	// create connection with main point of contact
-	mainIp := pbfters[0]
+	mainIp := lbfters[0]
 	mainConn, err := grpc.Dial(mainIp, grpc.WithInsecure())
 	if err != nil {
 		log.WithFields(log.Fields{
@@ -37,7 +39,8 @@ func main() {
 	}
 	defer mainConn.Close()
 
-	mainClient := pb.NewPbftClient(mainConn)
+	mainClient := pb.NewLbftClient(mainConn)
+	numPattern, _ := regexp.Compile("get num (.+)")
 
 	for {
 		// read in input from stdin
@@ -48,7 +51,7 @@ func main() {
 		msgStr := string(msg)
 		switch {
 		case msgStr == "get reqs":
-			for _, ip := range pbfters {
+			for _, ip := range lbfters {
 				conn, err := grpc.Dial(ip, grpc.WithInsecure())
 				if err != nil {
 					log.WithFields(log.Fields{
@@ -60,6 +63,23 @@ func main() {
 				c := pb.NewGossipClient(conn)
 				requests, _ := c.GetAllRequests(context.Background(), &pb.Void{})
 				fmt.Println(ip, "-", requests.Requests)
+				conn.Close()
+			}
+		case numPattern.MatchString(msgStr):
+			reqBytes := []byte(numPattern.FindStringSubmatch(msgStr)[1])
+			seqNumRequest := pb.SeqNumMsg{SeqNum: 0, ReqHash: util.HashBytes(reqBytes)}
+			for _, ip := range lbfters {
+				conn, err := grpc.Dial(ip, grpc.WithInsecure())
+				if err != nil {
+					log.WithFields(log.Fields{
+						"node": ip,
+						"error": err,
+					}).Error("Cannot dial node")
+					continue
+				}
+				c := pb.NewSnowballClient(conn)
+				seqNumRes, _ := c.GetVote(context.Background(), &seqNumRequest)
+				fmt.Println(ip, "-", seqNumRes.SeqNum)
 				conn.Close()
 			}
 		default:
@@ -83,7 +103,7 @@ func main() {
 				panic(err)
 			}
 
-			_, err = mainClient.GetReq(context.Background(), &pb.ReqBody{Body:reqBytes})
+			_, err = mainClient.LSendReq(context.Background(), &pb.ReqBody{Body:reqBytes})
 			if err != nil {
 				log.Error("Client sendReq error!")
 				panic(err)
