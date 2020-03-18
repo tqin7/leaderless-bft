@@ -6,21 +6,28 @@ import (
 	"strings"
 	tp "github.com/spockqin/leaderless-bft/types"
 	"time"
+	log "github.com/sirupsen/logrus"
 )
 
 func (p *Pbfter) GetMsgFromGossip(){
 	for {
 		p.requestsLock.Lock()
 
-		for _, req :=range p.requests {
+		for _, req := range p.requests {
 			if strings.Contains(req, "PrePrepareMsg") {
+				log.WithFields(log.Fields{
+					"ip": p.ip,
+				}).Info("got PrePrepareMsg")
 				var prePrepareMsg tp.PrePrepareMsg
 				err := json.Unmarshal([]byte(req), &prePrepareMsg)
-				if err != nil {
+				if err != nil {	
 					panic(errors.New("[GetMsgFromGossip] unmarshal PrePrepareMsg error"))
 				}
 				p.RouteMsg(&prePrepareMsg)
 			} else if strings.Contains(req, "PrepareMsg") {
+				log.WithFields(log.Fields{
+					"ip": p.ip,
+				}).Info("got PrepareMsg")
 				var prePareMsg tp.PrepareMsg
 				err := json.Unmarshal([]byte(req), &prePareMsg)
 				if err != nil {
@@ -28,6 +35,9 @@ func (p *Pbfter) GetMsgFromGossip(){
 				}
 				p.RouteMsg(&prePareMsg)
 			} else if strings.Contains(req, "CommitMsg") {
+				log.WithFields(log.Fields{
+					"ip": p.ip,
+				}).Info("got CommitMsg")
 				var commitMsg tp.CommitMsg
 				err := json.Unmarshal([]byte(req), &commitMsg)
 				if err != nil {
@@ -35,6 +45,9 @@ func (p *Pbfter) GetMsgFromGossip(){
 				}
 				p.RouteMsg(&commitMsg)
 			} else if strings.Contains(req, "ReplyMsg") {
+				log.WithFields(log.Fields{
+					"ip": p.ip,
+				}).Info("got ReplyMsg")
 				var replyMsg tp.ReplyMsg
 				err := json.Unmarshal([]byte(req), &replyMsg)
 				if err != nil {

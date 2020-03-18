@@ -54,7 +54,7 @@ type Pbfter struct {
 	MsgDelivery   chan interface{}
 }
 
-const f = 1;
+const f = 1; //TODO: set f to (R-1)/3
 
 func (p *Pbfter) GetReq(ctx context.Context, request *pb.ReqBody) (*pb.Void, error) {
 	var req tp.PbftReq
@@ -142,20 +142,20 @@ func (p *Pbfter) GetPrePrepare(msg *tp.PrePrepareMsg) (error) {
 	if prePareMsg != nil {
 		prePareMsg.NodeID = p.NodeID
 		LogStage("Pre-prepare", true, p.NodeID)
-		prePareMsgBytes, err := json.Marshal(*prePareMsg)
+		prepareMsgBytes, err := json.Marshal(*prePareMsg)
 		if err != nil {
-			return errors.New("[GetPrePrepare] prePareMsg marshal error!")
+			return errors.New("[GetPrePrepare] prepareMsg marshal error!")
 		} else {
 			ctx, cancel := context.WithTimeout(context.Background(), tp.GRPC_TIMEOUT)
-			_, pushErr := p.Push(ctx, &pb.ReqBody{Body:prePareMsgBytes})
+			_, pushErr := p.Push(ctx, &pb.ReqBody{Body:prepareMsgBytes})
 			if pushErr != nil {
-				panic(errors.New("[GetPrePrepare] push prePareMsgBytes error!"))
+				panic(errors.New("[GetPrePrepare] push prepareMsgBytes error!"))
 			}
 			defer cancel()
 		}
 		LogStage("Prepare", false, p.NodeID)
 	} else {
-		panic(errors.New("[GetPrePrepare] get empty prePareMsg"))
+		panic(errors.New("[GetPrePrepare] get empty prepareMsg"))
 	}
 	return nil
 }
@@ -186,7 +186,7 @@ func (p *Pbfter) GetPrepare(msg *tp.PrepareMsg) (error) {
 
 	commitMsg, err := p.CurrentState.Prepare(msg)
 	if err != nil {
-		log.Info(err)
+		log.Error(err)
 	}
 
 	if commitMsg != nil {
@@ -205,7 +205,6 @@ func (p *Pbfter) GetPrepare(msg *tp.PrepareMsg) (error) {
 		}
 		LogStage("Commit", false, p.NodeID)
 	}
-	// commitMsg == nil means that it haven't received 2f+1 prepare msg
 
 	return nil
 }
@@ -245,9 +244,10 @@ func (p *Pbfter) GetCommit(msg *tp.CommitMsg) (error) {
 	if err != nil {
 		fmt.Println("GetCommit Error")
 		log.Error(err)
-	} else {
-		p.CurrentState = nil
-	}
+	} 
+	// else {
+	// 	p.CurrentState = nil
+	// }
 
 	if replyMsg != nil {
 		if committedReq == nil {
