@@ -113,6 +113,19 @@ func (p *Pbfter) ResolveMsg() {
 			}
 		case []*tp.CommitMsg:
 			for _, msg := range msgs.([]*tp.CommitMsg) {
+				if p.CommittedMsgs != nil {
+					flag := false
+					for _, commitedMsg := range p.CommittedMsgs {
+						if msg.SequenceID == commitedMsg.SequenceID {
+							flag = true
+							break
+						}
+					}
+					if flag {
+						continue
+					}
+				}
+
 				err := p.GetCommit(msg)
 				if err != nil {
 					log.Error("[ResolveMsg] resolve Commit Error")
@@ -260,6 +273,7 @@ func (p *Pbfter) GetCommit(msg *tp.CommitMsg) (error) {
 
 		LogStage("Commit", true, p.NodeID)
 		LogStage("Reply", true, p.NodeID)
+		p.CurrentState = nil
 	}
 
 	return nil
@@ -330,7 +344,9 @@ func (state *State) StartConsensus(req *tp.PbftReq) (*tp.PrePrepareMsg, error) {
 	seqID := time.Now().UnixNano()
 
 	if state.LastSequenceID != -1 {
-		seqID = state.LastSequenceID + 1
+		for state.LastSequenceID >= seqID {
+			seqID += 1
+		}
 	}
 
 	req.SequenceID = seqID
