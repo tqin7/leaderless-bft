@@ -28,17 +28,19 @@ type Gossiper struct {
 }
 
 func (g *Gossiper) Poke(ctx context.Context, reqId *pb.ReqId) (*pb.Bool, error) {
+	hashString := string(reqId.Hash)
+	
+	g.hashesLock.Lock()
+	exists := g.hashes[hashString]
+	g.hashesLock.Unlock()
+
 	// check whether g is already poked for this request to
 	// avoid double pushing caused by concurrency
-	g.pokedLock.Lock()
-	exists := g.poked[string(reqId.Hash)]
-	g.poked[string(reqId.Hash)] = true
-	g.pokedLock.Unlock()
-
 	if !exists {
-		g.hashesLock.Lock()
-		_, exists = g.hashes[string(reqId.Hash)]
-		g.hashesLock.Unlock()
+		g.pokedLock.Lock()
+		exists = g.poked[hashString]
+		g.poked[hashString] = true
+		g.pokedLock.Unlock()
 	}
 
 	log.WithFields(log.Fields{
@@ -58,13 +60,13 @@ func (g *Gossiper) Push(ctx context.Context, reqBody *pb.ReqBody) (*pb.Void, err
 	g.requests = append(g.requests, string(reqBody.Body))
 	g.requestsLock.Unlock()
 
-	g.pokedLock.Lock()
-	delete(g.poked, string(reqHash))
-	g.pokedLock.Unlock()
-
 	g.hashesLock.Lock()
 	g.hashes[string(reqHash)] = true
 	g.hashesLock.Unlock()
+
+	g.pokedLock.Lock()
+	delete(g.poked, string(reqHash))
+	g.pokedLock.Unlock()
 
 	log.WithFields(log.Fields{
 		"ip": g.ip,

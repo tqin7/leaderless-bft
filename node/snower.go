@@ -33,6 +33,7 @@ func (s *Snower) GetVote(ctx context.Context, msg *pb.SeqNumMsg) (*pb.SeqNumMsg,
 	if exists {
 		return &pb.SeqNumMsg{SeqNum: seqNum, ReqHash: msg.ReqHash}, nil
 	} else {
+		//TODO: check whether msg.SeqNum is valid
 		s.seqNum = msg.SeqNum
 		s.performQueries(msg)
 		return &pb.SeqNumMsg{SeqNum: s.seqNum, ReqHash: msg.ReqHash}, nil

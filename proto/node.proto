@@ -31,6 +31,7 @@ message Void {}
 service Snowball {
     //get vote from this node
     rpc GetVote (SeqNumMsg) returns (SeqNumMsg) {}
+
     //a client sends request using this method
     rpc SendReq (ReqBody) returns (Void) {}
 
@@ -39,7 +40,7 @@ service Snowball {
 
 message SeqNumMsg {
     int64 seq_num = 1;
-    bytes req_hash = 2; // hash of the corresponding request
+    bytes req_hash = 2; //hash of the corresponding request
 }
 
 service Pbft {

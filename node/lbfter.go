@@ -19,7 +19,6 @@ type Lbfter struct {
 	Gossiper
 	Snower
 	Pbfter
-	// SeqIdDecided  map[string]chan bool
 }
 
 func (l *Lbfter) LSendReq(ctx context.Context, request *pb.ReqBody) (*pb.Void, error) {
@@ -59,15 +58,11 @@ func (l *Lbfter) LSendReq(ctx context.Context, request *pb.ReqBody) (*pb.Void, e
 }
 
 func (l *Lbfter) runSeqIdConsensus(operation string) {
-	l.SendReq(context.Background(), &pb.ReqBody{Body: []byte(operation)})
-	// l.SeqIdDecided[reqHash] <- true
+	l.SendReq(context.Background(), &pb.ReqBody{Body: []byte(operation)}) // snowball
 }
 
 func (l *Lbfter) startLbftConsensus(req *tp.PbftReq) (*tp.PrePrepareMsg, error) {
 	reqHash := string(util.HashBytes([]byte(req.Operation)))
-	// l.SeqIdDecided[reqHash] = make(chan bool)
-	// go l.RunSeqIdConsensus(reqHash)
-	// <-l.SeqIdDecided[reqHash]
 	l.runSeqIdConsensus(req.Operation)
 	req.SequenceID = l.finalSeqNums[string(reqHash)]
 

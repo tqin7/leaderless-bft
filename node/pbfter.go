@@ -253,6 +253,8 @@ func (state *State) Prepare(prepareMsg *tp.PrepareMsg) (*tp.CommitMsg, error)  {
 func (p *Pbfter) GetCommit(msg *tp.CommitMsg) (error) {
 	LogMsg(msg)
 
+	fmt.Println("node is in GetCommit")
+
 	replyMsg, committedReq, err := p.CurrentState.Commit(msg)
 	if err != nil {
 		fmt.Println("GetCommit Error")
