@@ -17,10 +17,11 @@ func main() {
 		lbfter := proto.CreateLbfter(node.Ip, 1, node.Ip, allIps)
 		peers := strings.Split(node.Peers, ",")
 		for _, peer := range peers {
-			lbfter.AddPeer(peer)
+			lbfter.Pbfter.AddPeer(peer)
+			lbfter.Snower.AddPeer(peer)
 		}
-		go lbfter.GetMsgFromGossip()
-		go lbfter.ResolveMsg()
+		go lbfter.Pbfter.GetMsgFromGossip()
+		go lbfter.Pbfter.ResolveMsg()
 		if i == len(nodes.Nodes) - 1 {
 			lbfter.LbfterUp()
 		} else {

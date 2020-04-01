@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	// "fmt"
+	"fmt"
 	log "github.com/sirupsen/logrus"
 	pb "github.com/spockqin/leaderless-bft/proto"
 	"google.golang.org/grpc"
@@ -16,7 +16,7 @@ import (
 )
 
 type Lbfter struct {
-	Gossiper
+	// Gossiper
 	Snower
 	Pbfter
 }
@@ -30,7 +30,7 @@ func (l *Lbfter) LSendReq(ctx context.Context, request *pb.ReqBody) (*pb.Void, e
 
 	LogMsg(req)
 
-	err = l.createStateForNewConsensus()
+	err = l.Pbfter.createStateForNewConsensus()
 	if err != nil {
 		log.Error("Error when create consensus state")
 		return &pb.Void{}, err
@@ -46,7 +46,9 @@ func (l *Lbfter) LSendReq(ctx context.Context, request *pb.ReqBody) (*pb.Void, e
 	if err != nil {
 		return &pb.Void{}, errors.New("[LSendReq] prePrepareMsg marshal error!")
 	} else {
+		fmt.Println("l Pbfter Push")
 		_, pushErr := l.Pbfter.Push(ctx, &pb.ReqBody{Body:prePrepareMsgBytes})
+		fmt.Println("Pushed")
 		if pushErr != nil {
 			panic(errors.New("[LSendReq] push prePrepareMsgBytes error!"))
 		}
@@ -58,15 +60,15 @@ func (l *Lbfter) LSendReq(ctx context.Context, request *pb.ReqBody) (*pb.Void, e
 }
 
 func (l *Lbfter) runSeqIdConsensus(operation string) {
-	l.SendReq(context.Background(), &pb.ReqBody{Body: []byte(operation)}) // snowball
+	l.Snower.SendReq(context.Background(), &pb.ReqBody{Body: []byte(operation)}) // snowball
 }
 
 func (l *Lbfter) startLbftConsensus(req *tp.PbftReq) (*tp.PrePrepareMsg, error) {
 	reqHash := string(util.HashBytes([]byte(req.Operation)))
 	l.runSeqIdConsensus(req.Operation)
-	req.SequenceID = l.finalSeqNums[string(reqHash)]
+	req.SequenceID = l.Snower.finalSeqNums[string(reqHash)]
 
-	state := l.CurrentState
+	state := l.Pbfter.CurrentState
 
 	state.MsgLogs.ReqMsg = req
 
@@ -80,7 +82,7 @@ func (l *Lbfter) startLbftConsensus(req *tp.PbftReq) (*tp.PrePrepareMsg, error) 
 
 	return &tp.PrePrepareMsg{
 		ViewID:               state.ViewID,
-		SequenceID:           l.finalSeqNums[string(reqHash)],
+		SequenceID:           l.Snower.finalSeqNums[string(reqHash)],
 		Digest:               digest,
 		Req:                  req,
 		MsgType:			  "PrePrepareMsg",
@@ -89,22 +91,22 @@ func (l *Lbfter) startLbftConsensus(req *tp.PbftReq) (*tp.PrePrepareMsg, error) 
 
 func CreateLbfter(nodeID string, viewID int64, ip string, allIps []string) *Lbfter {
 	newLbfter := &Lbfter{
-		Gossiper:      Gossiper{
-			ip:           ip,
-			peers:        make([]string, 0),
-			peersLock:    sync.Mutex{},
-			hashes:       make(map[string]bool),
-			hashesLock:   sync.Mutex{},
-			poked:        make(map[string]bool),
-			pokedLock:    sync.Mutex{},
-			requests:     make([]string, 0),
-			requestsLock: sync.Mutex{},
-		},
+		// Gossiper:      Gossiper{
+		// 	ip:           ip,
+		// 	peers:        make([]string, 0),
+		// 	peersLock:    sync.Mutex{},
+		// 	hashes:       make(map[string]bool),
+		// 	hashesLock:   sync.Mutex{},
+		// 	poked:        make(map[string]bool),
+		// 	pokedLock:    sync.Mutex{},
+		// 	requests:     make([]string, 0),
+		// 	requestsLock: sync.Mutex{},
+		// },
 
 		Snower:		   Snower{
 			allIps:			  allIps,
 			confidences:	  CreateConfidenceMap(),
-			seqNum: 		  -1,
+			seqNum: 		  1,
 			finalSeqNums:     make(map[string]int64),
 			finalSeqNumsLock:  sync.Mutex{},
 			Gossiper: Gossiper{
@@ -145,16 +147,16 @@ func CreateLbfter(nodeID string, viewID int64, ip string, allIps []string) *Lbft
 				requestsLock: sync.Mutex{},
 			},
 		},
-		// SeqIdDecided:  make(map[string]chan bool)
 	}
 
 	return newLbfter
 }
 
 func (l *Lbfter) LbfterUp() {
-	lis, err := net.Listen("tcp", l.ip)
+	nodeIp := l.Snower.ip
+	lis, err := net.Listen("tcp", nodeIp)
 	if err != nil {
-		log.WithField("ip", l.ip).Error("Cannot listen on tcp [lbfter]")
+		log.WithField("ip", nodeIp).Error("Cannot listen on tcp [lbfter]")
 		panic(err)
 	}
 
@@ -167,7 +169,32 @@ func (l *Lbfter) LbfterUp() {
 	// reflection.Register(grpcServer)
 
 	if err := grpcServer.Serve(lis); err != nil {
-		log.WithField("ip", l.ip).Error("Cannot serve [lbfter]")
+		log.WithField("ip", nodeIp).Error("Cannot serve [lbfter]")
 		panic(err)
 	}
 }
+
+
+/* ******************************************
+    Override other gRPC service methods to 
+    direct method calls to correct embedding
+   ****************************************** */
+
+/* Gossip */
+func (l *Lbfter) Poke(ctx context.Context, reqId *pb.ReqId) (*pb.Bool, error) {
+	return l.Pbfter.Poke(ctx, reqId)
+}
+func (l *Lbfter) Push(ctx context.Context, reqBody *pb.ReqBody) (*pb.Void, error) {
+	return l.Pbfter.Push(ctx, reqBody)
+}
+
+func (l *Lbfter) GetAllRequests(ctx context.Context, void *pb.Void) (*pb.Requests, error) {
+	return l.Pbfter.GetAllRequests(ctx, void)
+}
+
+/* Snowball */
+func (l *Lbfter) GetVote(ctx context.Context, msg *pb.SeqNumMsg) (*pb.SeqNumMsg, error) {
+	return l.Snower.GetVote(ctx, msg)
+}
+
+/* Pbfter */

@@ -54,7 +54,7 @@ type Pbfter struct {
 	MsgDelivery   chan interface{}
 }
 
-const f = 1; //TODO: set f to (R-1)/3
+const f = 0; //TODO: set f to (R-1)/3
 
 func (p *Pbfter) GetReq(ctx context.Context, request *pb.ReqBody) (*pb.Void, error) {
 	var req tp.PbftReq
@@ -269,9 +269,13 @@ func (p *Pbfter) GetCommit(msg *tp.CommitMsg) (error) {
 		replyMsg.NodeID = p.NodeID
 		p.CommittedMsgs = append(p.CommittedMsgs, committedReq)
 
+		log.WithFields(log.Fields{
+				"ip": p.ip,
+			}).Info("Set Pbft state to nil\n")
+		p.CurrentState = nil
+
 		LogStage("Commit", true, p.NodeID)
 		LogStage("Reply", true, p.NodeID)
-		p.CurrentState = nil
 	}
 
 	return nil

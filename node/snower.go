@@ -45,7 +45,7 @@ func (s *Snower) SendReq(ctx context.Context, req *pb.ReqBody) (*pb.Void, error)
 	reqHash := util.HashBytes(req.Body)
 
 	if !s.hashes[string(reqHash)] {
-		s.Push(ctx, req)
+		// s.Push(ctx, req)
 
 		s.seqNum += 1
 		seqNumProposal := pb.SeqNumMsg{SeqNum: s.seqNum, ReqHash: reqHash}
@@ -66,6 +66,9 @@ func (s *Snower) performQueries(msg *pb.SeqNumMsg) {
 	wg.Wait()
 
 	if s.confidences.Size() == 0 {
+		log.WithFields(log.Fields{
+			"ip": s.ip,
+		}).Info("Not able to obtain any snowball vote")
 		return
 	}
 
@@ -74,7 +77,7 @@ func (s *Snower) performQueries(msg *pb.SeqNumMsg) {
 	log.WithFields(log.Fields{
 		"ip": s.ip,
 		"majority": finalSeqNum,
-	}).Info("Completed entire query")
+	}).Info("Completed entire snowball query")
 
 	s.finalSeqNumsLock.Lock()
 	s.finalSeqNums[string(msg.ReqHash)] = finalSeqNum
@@ -88,7 +91,7 @@ func (s *Snower) performQueries(msg *pb.SeqNumMsg) {
 func (s *Snower) getMajorityVote(msg *pb.SeqNumMsg, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	sampleSize := 4		//TODO: determine sample size as sqrt?
+	sampleSize := 2	//TODO: determine sample size as sqrt?
 	var alpha uint = 1 // TODO: alpha must be in (k/2, k]
 
 	networkSubset := util.UniqueRandomSample(s.allIps, sampleSize)
@@ -106,7 +109,7 @@ func (s *Snower) getMajorityVote(msg *pb.SeqNumMsg, wg *sync.WaitGroup) {
 		}
 		client := pb.NewSnowballClient(conn)
 		vote, err := client.GetVote(context.Background(), msg)
-		//CallOption for above line:    , grpc.WaitForReady(true)
+		//CallOption "grpc.WaitForReady(true)" elminates "TransientFailure error" but gets stuck
 		conn.Close()
 		if err != nil {
 			log.WithFields(log.Fields{
