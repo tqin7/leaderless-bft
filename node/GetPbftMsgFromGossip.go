@@ -76,7 +76,7 @@ func (p *Pbfter) RouteMsg(msg interface{}) []error{
 			p.MsgBuffer.PrePrepareMsgs = append(p.MsgBuffer.PrePrepareMsgs, msg.(*tp.PrePrepareMsg))
 		}
 	case *tp.PrepareMsg:
-		if p.CurrentState == nil || p.CurrentState.CurrentStage != PrePrepared {
+		if p.CurrentState == nil || p.CurrentState[msg.(*tp.PrepareMsg).SequenceID].CurrentStage != PrePrepared {
 			p.MsgBuffer.PrepareMsgs = append(p.MsgBuffer.PrepareMsgs, msg.(*tp.PrepareMsg))
 		} else {
 			msgs := make([]*tp.PrepareMsg, len(p.MsgBuffer.PrepareMsgs))
@@ -86,7 +86,7 @@ func (p *Pbfter) RouteMsg(msg interface{}) []error{
 			p.MsgDelivery <- msgs
 		}
 	case *tp.CommitMsg:
-		if p.CurrentState == nil || p.CurrentState.CurrentStage != Prepared {
+		if p.CurrentState == nil || p.CurrentState[msg.(*tp.PrepareMsg).SequenceID].CurrentStage != Prepared {
 			p.MsgBuffer.CommitMsgs = append(p.MsgBuffer.CommitMsgs, msg.(*tp.CommitMsg))
 		} else {
 			msgs := make([]*tp.CommitMsg, len(p.MsgBuffer.CommitMsgs))

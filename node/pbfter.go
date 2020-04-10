@@ -48,7 +48,7 @@ type Pbfter struct {
 	Gossiper
 	NodeID        string
 	ViewID        int64
-	CurrentState  *State
+	CurrentState  []*State
 	CommittedMsgs []*tp.PbftReq
 	MsgBuffer     *MsgBuffer
 	MsgDelivery   chan interface{}
@@ -65,12 +65,12 @@ func (p *Pbfter) GetReq(ctx context.Context, request *pb.ReqBody) (*pb.Void, err
 
 	LogMsg(req)
 
-	err = p.createStateForNewConsensus()
+	err, seqID := p.createStateForNewConsensus()
 	if err != nil {
 		return &pb.Void{}, err
 	}
 
-	prePrepareMsg, err := p.CurrentState.StartConsensus(&req)
+	prePrepareMsg, err := p.CurrentState[seqID].StartConsensus(&req, seqID)
 	if err != nil {
 		log.Error("Error happens when starting consensus [SendReq]")
 	}
@@ -140,13 +140,13 @@ func (p *Pbfter) ResolveMsg() {
 // node sends prePrepare msg
 func (p *Pbfter) GetPrePrepare(msg *tp.PrePrepareMsg) (error) {
 	LogMsg(msg)
-	err := p.createStateForNewConsensus()
+	err, seqID := p.createStateForNewConsensus()
 	if err != nil {
 		log.Error("[GetPrePrepare] createStateForNewConsensus error")
 		panic(err)
 	}
 
-	prePareMsg, err := p.CurrentState.PrePrepare(msg)
+	prePareMsg, err := p.CurrentState[seqID].PrePrepare(msg)
 	if err != nil {
 		log.Error("[GetPrePrepare] PrePrepare error")
 		panic(err)
@@ -197,7 +197,7 @@ func (state *State) PrePrepare(prePrepareMsg *tp.PrePrepareMsg) (*tp.PrepareMsg,
 func (p *Pbfter) GetPrepare(msg *tp.PrepareMsg) (error) {
 	LogMsg(msg)
 
-	commitMsg, err := p.CurrentState.Prepare(msg)
+	commitMsg, err := p.CurrentState[msg.SequenceID].Prepare(msg)
 	if err != nil {
 		log.Error(err)
 	}
@@ -255,7 +255,7 @@ func (p *Pbfter) GetCommit(msg *tp.CommitMsg) (error) {
 
 	fmt.Println("node is in GetCommit")
 
-	replyMsg, committedReq, err := p.CurrentState.Commit(msg)
+	replyMsg, committedReq, err := p.CurrentState[msg.SequenceID].Commit(msg)
 	if err != nil {
 		fmt.Println("GetCommit Error")
 		log.Error(err)
@@ -312,11 +312,7 @@ func (state *State) Commit(commitMsg *tp.CommitMsg) (*tp.ReplyMsg, *tp.PbftReq, 
 	return nil, nil, errors.New("[Commit] haven't received 2f+1 commit msg")
 }
 
-func (p *Pbfter) createStateForNewConsensus() error {
-	if p.CurrentState != nil {
-		return errors.New("another consensus is ongoing")
-	}
-
+func (p *Pbfter) createStateForNewConsensus() (error, int64) {
 	var lastSeqID int64
 	if len(p.CommittedMsgs) == 0 {
 		lastSeqID = -1
@@ -324,9 +320,17 @@ func (p *Pbfter) createStateForNewConsensus() error {
 		lastSeqID = p.CommittedMsgs[len(p.CommittedMsgs) - 1].SequenceID
 	}
 
-	p.CurrentState = createState(p.ViewID, lastSeqID)
+	seqID := time.Now().UnixNano()
 
-	return nil
+	if lastSeqID != -1 {
+		for lastSeqID >= seqID {
+			seqID += 1
+		}
+	}
+
+	p.CurrentState[seqID] = createState(p.ViewID, lastSeqID)
+
+	return nil, seqID
 }
 
 func createState (viewID int64, seqID int64) *State {
@@ -342,15 +346,7 @@ func createState (viewID int64, seqID int64) *State {
 	}
 }
 
-func (state *State) StartConsensus(req *tp.PbftReq) (*tp.PrePrepareMsg, error) {
-	seqID := time.Now().UnixNano()
-
-	if state.LastSequenceID != -1 {
-		for state.LastSequenceID >= seqID {
-			seqID += 1
-		}
-	}
-
+func (state *State) StartConsensus(req *tp.PbftReq, seqID int64) (*tp.PrePrepareMsg, error) {
 	req.SequenceID = seqID
 
 	state.MsgLogs.ReqMsg = req
@@ -415,7 +411,7 @@ func CreatePbfter(nodeID string, viewID int64, ip string, allIps []string) *Pbft
 		},
 		NodeID:        nodeID,
 		ViewID:        viewID,
-		CurrentState:  nil,
+		CurrentState:  make([]*State, 0),
 		CommittedMsgs: make([]*tp.PbftReq, 0),
 		MsgBuffer:     &MsgBuffer{
 			ReqMsgs:        make([]*tp.PbftReq, 0),
