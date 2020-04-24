@@ -13,6 +13,8 @@ import (
 	"github.com/spockqin/leaderless-bft/types"
 	"fmt"
 	"sync"
+	"time"
+	"math"
 )
 
 type Snower struct {
@@ -85,14 +87,16 @@ func (s *Snower) performQueries(msg *pb.SeqNumMsg) {
 
 	s.confidences = CreateConfidenceMap()
 	s.seqNum = finalSeqNum
+
+	fmt.Println("Testing Timestamp:", time.Now().Unix())
 }
 
 //queries random subset, get majority, update confidence and proposal
 func (s *Snower) getMajorityVote(msg *pb.SeqNumMsg, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	sampleSize := 2	//TODO: determine sample size as sqrt?
-	var alpha uint = 1 // TODO: alpha must be in (k/2, k]
+	sampleSize := int(math.Floor(math.Sqrt(float64(len(s.allIps)))))
+	alpha := uint(math.Floor(float64(sampleSize / 2)))
 
 	networkSubset := util.UniqueRandomSample(s.allIps, sampleSize)
 	votes := CreateConfidenceMap()
@@ -123,12 +127,12 @@ func (s *Snower) getMajorityVote(msg *pb.SeqNumMsg, wg *sync.WaitGroup) {
 			"ip": s.ip,
 			"from": ip,
 		}).Info("Got vote")
-		fmt.Println("vote is: ", vote.SeqNum)
+		// fmt.Println("vote is: ", vote.SeqNum)
 		votes.IncreaseConfidence(vote.SeqNum)
 	}
 
 	if votes.Size() != 0 {
-		fmt.Println("votes map: ", votes.kvMap)
+		// fmt.Println("votes map: ", votes.kvMap)
 		majorityValue, majorityNumVotes := votes.GetKeyWithMostConfidence()
 		if majorityNumVotes >= alpha {
 			s.confidences.IncreaseConfidence(majorityValue)

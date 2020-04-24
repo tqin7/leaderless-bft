@@ -19,6 +19,7 @@ type Node struct {
 func ReadNetworkConfig(nodesPtr *Nodes, directory string) {
 	nodesJson, err := os.Open(directory)
 	if err != nil {
+		panic(err)
 		fmt.Println("Cannot read network configuration file")
 		return
 	}

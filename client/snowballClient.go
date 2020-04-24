@@ -11,6 +11,7 @@ import (
 	"github.com/spockqin/leaderless-bft/util"
 	"context"
 	"github.com/spockqin/leaderless-bft/tests/network"
+	"strconv"
 )
 
 func main() {
@@ -78,8 +79,31 @@ func main() {
 				fmt.Println(ip, "-", seqNumRes.SeqNum)
 				conn.Close()
 			}
+		case msgStr == "throughput same":
+			testThroughPutSameConn(snowers)
 		default:
 			mainClient.SendReq(context.Background(), &pb.ReqBody{Body: msg})
 		}
+	}
+}
+
+func testThroughPutSameConn(snowers []string) {
+	// fmt.Println("Timestamp right before first dialing: ",
+	// 	time.Now().Format("2006-01-01 15:04:05 .000"))
+
+	mainIp := snowers[0]
+	mainConn, err := grpc.Dial(mainIp, grpc.WithInsecure())
+	if err != nil {
+		fmt.Println("Cannot establish TCP connection with snower")
+		return
+	}
+	defer mainConn.Close()
+
+	mainClient := pb.NewSnowballClient(mainConn)
+
+	for i := 0; i < 10; i++ {
+		req := []byte(strconv.Itoa(i))
+		mainClient.SendReq(context.Background(), &pb.ReqBody{Body: req})
+		fmt.Println("request ", i, " complete")
 	}
 }

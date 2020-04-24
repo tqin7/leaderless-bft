@@ -1,6 +1,7 @@
 package proto
 
 import (
+	"fmt"
 	"sync"
 	"context"
 	pb "github.com/spockqin/leaderless-bft/proto"
@@ -48,8 +49,10 @@ func (g *Gossiper) Poke(ctx context.Context, reqId *pb.ReqId) (*pb.Bool, error) 
 		"exists": exists,
 	}).Info("got poked")
 
-	log.Info("Timestamp: ",
-		time.Now().Format("2006-01-01 15:04:05 .000"))
+	// log.Info("Timestamp: ",
+	// 	time.Now().Format("2006-01-01 15:04:05 .000"))
+	fmt.Println("Testing Timestamp:", time.Now().Unix())
+
 	return &pb.Bool{Status: exists}, nil
 }
 

@@ -8,9 +8,10 @@ maxNeighborSize=$(echo "l($numOfNodes)" | bc -l)
 maxNeighborSize=$( printf "%.0f" $maxNeighborSize )
 ips=()
 nodesGenerated=0
-curPort=30000
+curPort=29999
 while [[ ${nodesGenerated} -lt ${numOfNodes} ]]
 do
+    curPort=$((curPort+1))
     if lsof -Pi :${curPort} -sTCP:LISTEN -t >/dev/null ; then
         echo "port in use, skip."
     else
@@ -18,10 +19,7 @@ do
         ips+=(127.0.0.1:$curPort)
         nodesGenerated=$((nodesGenerated+1))
     fi
-    curPort=$((curPort+1))
 done
-
-#echo -e "\nnodes generated: ${ips[@]}"
 
 jsonStr=""
 
@@ -47,4 +45,5 @@ echo ${jsonStr} > config.json
 
 echo "Network graph saved to json file"
 
-# go to https://codebeautify.org/jsonviewer to beautify the json generated
+
+### go to https://codebeautify.org/jsonviewer to beautify the json generated

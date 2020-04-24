@@ -1,4 +1,5 @@
 syntax = "proto3";
+option go_package = "github.com/spockqin/leaderless-bft/proto";
 
 service Gossip {
     //checks whether hash already exists

@@ -2,7 +2,7 @@
 
 
 [[projects]]
-  digest = "1:239c4c7fd2159585454003d9be7207167970194216193a8a210b8d29576f19c9"
+  digest = "1:7beb0b38399dd0f16d27476a1351d9d5a1288757c7c673fece30b65f95fb04e5"
   name = "github.com/golang/protobuf"
   packages = [
     "proto",
@@ -12,8 +12,8 @@
     "ptypes/timestamp",
   ]
   pruneopts = "UT"
-  revision = "b5d812f8a3706043e23a9cd5babf2e5423744d30"
-  version = "v1.3.1"
+  revision = "1b794fe86dd6a0c7c52ae69b5c9cb0aeedc52afa"
+  version = "v1.4.0"
 
 [[projects]]
   digest = "1:31e761d97c76151dde79e9d28964a812c46efc5baee4085b86f68f0c654450de"
@@ -97,10 +97,12 @@
   revision = "64821d5d210748c883cd2b809589555ae4654203"
 
 [[projects]]
-  digest = "1:c00eb80d7b152379c3e94c38d82b29deca98b1d0f53e4e20362589b7fcbffa07"
+  digest = "1:a7f15d03c0dd3cf7ce505708cae58c021ba4e76bf80b7ad0376739d46e5263de"
   name = "google.golang.org/grpc"
   packages = [
     ".",
+    "attributes",
+    "backoff",
     "balancer",
     "balancer/base",
     "balancer/roundrobin",
@@ -114,11 +116,17 @@
     "grpclog",
     "internal",
     "internal/backoff",
+    "internal/balancerload",
     "internal/binarylog",
+    "internal/buffer",
     "internal/channelz",
     "internal/envconfig",
+    "internal/grpclog",
     "internal/grpcrand",
     "internal/grpcsync",
+    "internal/grpcutil",
+    "internal/resolver/dns",
+    "internal/resolver/passthrough",
     "internal/syscall",
     "internal/transport",
     "keepalive",
@@ -126,15 +134,53 @@
     "naming",
     "peer",
     "resolver",
-    "resolver/dns",
-    "resolver/passthrough",
+    "serviceconfig",
     "stats",
     "status",
     "tap",
   ]
   pruneopts = "UT"
-  revision = "3507fb8e1a5ad030303c106fef3a47c9fdad16ad"
-  version = "v1.19.1"
+  revision = "ac54eec90516cee50fc6b9b113b34628a85f976f"
+  version = "v1.28.1"
+
+[[projects]]
+  digest = "1:4016f95c99c4974f9aa4a54d08846306a2548797e841b349edb5e1d3a16b3d0c"
+  name = "google.golang.org/protobuf"
+  packages = [
+    "encoding/prototext",
+    "encoding/protowire",
+    "internal/descfmt",
+    "internal/descopts",
+    "internal/detrand",
+    "internal/encoding/defval",
+    "internal/encoding/messageset",
+    "internal/encoding/tag",
+    "internal/encoding/text",
+    "internal/errors",
+    "internal/fieldnum",
+    "internal/fieldsort",
+    "internal/filedesc",
+    "internal/filetype",
+    "internal/flags",
+    "internal/genname",
+    "internal/impl",
+    "internal/mapsort",
+    "internal/pragma",
+    "internal/set",
+    "internal/strs",
+    "internal/version",
+    "proto",
+    "reflect/protoreflect",
+    "reflect/protoregistry",
+    "runtime/protoiface",
+    "runtime/protoimpl",
+    "types/known/anypb",
+    "types/known/durationpb",
+    "types/known/timestamppb",
+  ]
+  pruneopts = "UT"
+  revision = "3b9eee12916ce611400f93d6c2fed2fc2911b0ad"
+  version = "v1.21.0"
 
 [solve-meta]
   analyzer-name = "dep"
@@ -145,6 +191,8 @@
     "google.golang.org/grpc",
     "google.golang.org/grpc/codes",
     "google.golang.org/grpc/status",
+    "google.golang.org/protobuf/reflect/protoreflect",
+    "google.golang.org/protobuf/runtime/protoimpl",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1

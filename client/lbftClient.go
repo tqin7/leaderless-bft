@@ -82,6 +82,8 @@ func main() {
 				fmt.Println(ip, "-", seqNumRes.SeqNum)
 				conn.Close()
 			}
+		case msgStr == "throughput same":
+			testThroughPutSameConn(lbfters)
 		default:
 			elements := strings.Split(msgStr,  " ")
 			timeStamp, err := strconv.ParseInt(elements[2], 10, 64)
@@ -109,5 +111,25 @@ func main() {
 				panic(err)
 			}
 		}
+	}
+}
+
+func testThroughPutSameConn(lbfters []string) {
+	// fmt.Println("Timestamp right before first dialing: ",
+	// 	time.Now().Format("2006-01-01 15:04:05 .000"))
+
+	mainIp := lbfters[0]
+	mainConn, err := grpc.Dial(mainIp, grpc.WithInsecure())
+	if err != nil {
+		fmt.Println("Cannot establish TCP connection with lbfter")
+		return
+	}
+	defer mainConn.Close()
+
+	mainClient := pb.NewLbftClient(mainConn)
+
+	for i := 0; i < 100; i++ {
+		req := []byte(strconv.Itoa(i)) //TODO: change msg format to: 1 msg1 1
+		mainClient.LSendReq(context.Background(), &pb.ReqBody{Body: req})
 	}
 }
