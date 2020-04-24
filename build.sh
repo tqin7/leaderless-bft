@@ -28,36 +28,7 @@ echo -e 'Done\n'
 echo 'Building go files...'
 
 # for BRC cluster use
-# env GOOS=linux GOARCH=amd64 go build -o ./build/gossipUp ./gossipUp.go
-# 	env GOOS=linux GOARCH=amd64 go build -o ./build/snowballUp ./snowballUp.go
-# 	env GOOS=linux GOARCH=amd64 go build -o ./build/pbftUp ./pbftUp.go
-# 	# client files
-# 	env GOOS=linux GOARCH=amd64 go build -o ./build/clients/gossipClient ./client/gossipClient.go
-# 	env GOOS=linux GOARCH=amd64 go build -o ./build/clients/snowballClient ./client/snowballClient.go
-# 	env GOOS=linux GOARCH=amd64 go build -o ./build/clients/pbftClient ./client/pbftClient.go
-# 	env GOOS=linux GOARCH=amd64 go build -o ./build/clients/lbftClient ./client/lbftClient.go
-# 	# test files
-# 	# env GOOS=linux GOARCH=amd64 go build -o ./build/tests/testSendRequests ./tests/testSendRequests.go
-# 	env GOOS=linux GOARCH=amd64 go build -o ./build/tests/calcExecTime ./tests/calcExecTime.go
-
-# for local computer use
-if [[ "$OSTYPE" == "darwin"* ]]
-then
-	# node up files
-	env GOOS=darwin GOARCH=amd64 go build -o ./build/gossipUp ./gossipUp.go
-	env GOOS=darwin GOARCH=amd64 go build -o ./build/snowballUp ./snowballUp.go
-	env GOOS=darwin GOARCH=amd64 go build -o ./build/pbftUp ./pbftUp.go
-	# client files
-	env GOOS=darwin GOARCH=amd64 go build -o ./build/clients/gossipClient ./client/gossipClient.go
-	env GOOS=darwin GOARCH=amd64 go build -o ./build/clients/snowballClient ./client/snowballClient.go
-	env GOOS=darwin GOARCH=amd64 go build -o ./build/clients/pbftClient ./client/pbftClient.go
-	env GOOS=darwin GOARCH=amd64 go build -o ./build/clients/lbftClient ./client/lbftClient.go
-	# test files
-	# env GOOS=darwin GOARCH=amd64 go build -o ./build//tests/testSendRequests ./tests/testSendRequests.go
-	env GOOS=darwin GOARCH=amd64 go build -o ./build/tests/calcExecTime ./tests/calcExecTime.go
-else
-	# node up files
-	env GOOS=linux GOARCH=amd64 go build -o ./build/gossipUp ./gossipUp.go
+env GOOS=linux GOARCH=amd64 go build -o ./build/gossipUp ./gossipUp.go
 	env GOOS=linux GOARCH=amd64 go build -o ./build/snowballUp ./snowballUp.go
 	env GOOS=linux GOARCH=amd64 go build -o ./build/pbftUp ./pbftUp.go
 	# client files
@@ -68,5 +39,34 @@ else
 	# test files
 	# env GOOS=linux GOARCH=amd64 go build -o ./build/tests/testSendRequests ./tests/testSendRequests.go
 	env GOOS=linux GOARCH=amd64 go build -o ./build/tests/calcExecTime ./tests/calcExecTime.go
-fi
+
+# for local computer use
+# if [[ "$OSTYPE" == "darwin"* ]]
+# then
+# 	# node up files
+# 	env GOOS=darwin GOARCH=amd64 go build -o ./build/gossipUp ./gossipUp.go
+# 	env GOOS=darwin GOARCH=amd64 go build -o ./build/snowballUp ./snowballUp.go
+# 	env GOOS=darwin GOARCH=amd64 go build -o ./build/pbftUp ./pbftUp.go
+# 	# client files
+# 	env GOOS=darwin GOARCH=amd64 go build -o ./build/clients/gossipClient ./client/gossipClient.go
+# 	env GOOS=darwin GOARCH=amd64 go build -o ./build/clients/snowballClient ./client/snowballClient.go
+# 	env GOOS=darwin GOARCH=amd64 go build -o ./build/clients/pbftClient ./client/pbftClient.go
+# 	env GOOS=darwin GOARCH=amd64 go build -o ./build/clients/lbftClient ./client/lbftClient.go
+# 	# test files
+# 	# env GOOS=darwin GOARCH=amd64 go build -o ./build//tests/testSendRequests ./tests/testSendRequests.go
+# 	env GOOS=darwin GOARCH=amd64 go build -o ./build/tests/calcExecTime ./tests/calcExecTime.go
+# else
+# 	# node up files
+# 	env GOOS=linux GOARCH=amd64 go build -o ./build/gossipUp ./gossipUp.go
+# 	env GOOS=linux GOARCH=amd64 go build -o ./build/snowballUp ./snowballUp.go
+# 	env GOOS=linux GOARCH=amd64 go build -o ./build/pbftUp ./pbftUp.go
+# 	# client files
+# 	env GOOS=linux GOARCH=amd64 go build -o ./build/clients/gossipClient ./client/gossipClient.go
+# 	env GOOS=linux GOARCH=amd64 go build -o ./build/clients/snowballClient ./client/snowballClient.go
+# 	env GOOS=linux GOARCH=amd64 go build -o ./build/clients/pbftClient ./client/pbftClient.go
+# 	env GOOS=linux GOARCH=amd64 go build -o ./build/clients/lbftClient ./client/lbftClient.go
+# 	# test files
+# 	# env GOOS=linux GOARCH=amd64 go build -o ./build/tests/testSendRequests ./tests/testSendRequests.go
+# 	env GOOS=linux GOARCH=amd64 go build -o ./build/tests/calcExecTime ./tests/calcExecTime.go
+# fi
 echo -e 'Done\n'

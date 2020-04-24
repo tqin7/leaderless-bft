@@ -101,7 +101,7 @@ func testThroughPutSameConn(snowers []string) {
 
 	mainClient := pb.NewSnowballClient(mainConn)
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 100; i++ {
 		req := []byte(strconv.Itoa(i))
 		mainClient.SendReq(context.Background(), &pb.ReqBody{Body: req})
 		fmt.Println("request ", i, " complete")

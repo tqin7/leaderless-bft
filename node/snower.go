@@ -138,7 +138,7 @@ func (s *Snower) getMajorityVote(reqHashStr string, msg *pb.SeqNumMsg, wg *sync.
 	}
 
 	if votes.Size() != 0 {
-		fmt.Println("votes map: ", votes.kvMap)
+		// fmt.Println("votes map: ", votes.kvMap)
 		majorityValue, majorityNumVotes := votes.GetKeyWithMostConfidence()
 		if majorityNumVotes >= alpha {
 			reqConfidenceMap := s.confidences[reqHashStr]
