@@ -105,7 +105,7 @@ func CreateLbfter(nodeID string, viewID int64, ip string, allIps []string) *Lbft
 
 		Snower:		   Snower{
 			allIps:			  allIps,
-			confidences:	  CreateConfidenceMap(),
+			confidences:	  make(map[string]ConfidenceMap),
 			seqNum: 		  1,
 			finalSeqNums:     make(map[string]int64),
 			finalSeqNumsLock:  sync.Mutex{},

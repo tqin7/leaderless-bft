@@ -1,15 +1,12 @@
 package proto
 
 import (
-	// "math/rand"
 	"context"
 	pb "github.com/spockqin/leaderless-bft/proto"
-	// "errors"
 	"github.com/spockqin/leaderless-bft/util"
 	grpc "google.golang.org/grpc"
 	log "github.com/sirupsen/logrus"
 	"net"
-	// "bytes"
 	"github.com/spockqin/leaderless-bft/types"
 	"fmt"
 	"sync"
@@ -20,7 +17,8 @@ import (
 type Snower struct {
 	Gossiper
 	allIps []string // ip of every node in the network
-	confidences ConfidenceMap // storing num of queries that yield each output
+	//confidences ConfidenceMap // storing num of queries that yield each output
+	confidences map[string]ConfidenceMap
 	seqNum int64 // current sequence number, non-decreasing
 	finalSeqNums map[string]int64 // map request hashes (stringified) to their final sequence numbers
 	finalSeqNumsLock sync.Mutex
@@ -28,53 +26,64 @@ type Snower struct {
 
 /* return this node's opinion on sequence number */
 func (s *Snower) GetVote(ctx context.Context, msg *pb.SeqNumMsg) (*pb.SeqNumMsg, error) {
+	reqHashStr := string(msg.ReqHash)
+
 	// return existing seq num if it's determined already
 	s.finalSeqNumsLock.Lock()
-	seqNum, exists := s.finalSeqNums[string(msg.ReqHash)]
+	seqNum, exists := s.finalSeqNums[reqHashStr]
 	s.finalSeqNumsLock.Unlock()
 	if exists {
 		return &pb.SeqNumMsg{SeqNum: seqNum, ReqHash: msg.ReqHash}, nil
 	} else {
 		//TODO: check whether msg.SeqNum is valid
+		// if valid, adopt the seq num
 		s.seqNum = msg.SeqNum
-		s.performQueries(msg)
-		return &pb.SeqNumMsg{SeqNum: s.seqNum, ReqHash: msg.ReqHash}, nil
+		s.finalSeqNumsLock.Lock()
+		s.finalSeqNums[reqHashStr] = msg.SeqNum
+		s.finalSeqNumsLock.Unlock()
+
+		s.performQueries(reqHashStr, msg)
+		return &pb.SeqNumMsg{SeqNum: msg.SeqNum, ReqHash: msg.ReqHash}, nil
 	}
 }
 
 func (s *Snower) SendReq(ctx context.Context, req *pb.ReqBody) (*pb.Void, error) {
 	// check if request is already known
 	reqHash := util.HashBytes(req.Body)
+	reqHashStr := string(reqHash)
 
-	if !s.hashes[string(reqHash)] {
+	if !s.hashes[reqHashStr] {
 		// s.Push(ctx, req)
 
 		s.seqNum += 1
 		seqNumProposal := pb.SeqNumMsg{SeqNum: s.seqNum, ReqHash: reqHash}
-		s.performQueries(&seqNumProposal)
+		s.performQueries(reqHashStr, &seqNumProposal)
 	}
 
 	return &pb.Void{}, nil
 }
 
-func (s *Snower) performQueries(msg *pb.SeqNumMsg) {
+func (s *Snower) performQueries(reqHashStr string, msg *pb.SeqNumMsg) {
+	s.confidences[reqHashStr] = CreateConfidenceMap()
+
 	var wg sync.WaitGroup
 
 	for i := 0; i < types.SNOWBALL_SAMPLE_ROUNDS; i++ {
 		wg.Add(1)
-		go s.getMajorityVote(msg, &wg)
+		go s.getMajorityVote(reqHashStr, msg, &wg)
 	}
 
 	wg.Wait()
 
-	if s.confidences.Size() == 0 {
+	reqConfidenceMap := s.confidences[reqHashStr]
+	if reqConfidenceMap.Size() == 0 {
 		log.WithFields(log.Fields{
 			"ip": s.ip,
 		}).Info("Not able to obtain any snowball vote")
 		return
 	}
 
-	finalSeqNum, _ := s.confidences.GetKeyWithMostConfidence()
+	finalSeqNum, _ := reqConfidenceMap.GetKeyWithMostConfidence()
 
 	log.WithFields(log.Fields{
 		"ip": s.ip,
@@ -82,17 +91,14 @@ func (s *Snower) performQueries(msg *pb.SeqNumMsg) {
 	}).Info("Completed entire snowball query")
 
 	s.finalSeqNumsLock.Lock()
-	s.finalSeqNums[string(msg.ReqHash)] = finalSeqNum
+	s.finalSeqNums[reqHashStr] = finalSeqNum
 	s.finalSeqNumsLock.Unlock()
-
-	s.confidences = CreateConfidenceMap()
-	s.seqNum = finalSeqNum
 
 	fmt.Println("Testing Timestamp:", time.Now().Unix())
 }
 
 //queries random subset, get majority, update confidence and proposal
-func (s *Snower) getMajorityVote(msg *pb.SeqNumMsg, wg *sync.WaitGroup) {
+func (s *Snower) getMajorityVote(reqHashStr string, msg *pb.SeqNumMsg, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	sampleSize := int(math.Floor(math.Sqrt(float64(len(s.allIps)))))
@@ -132,10 +138,11 @@ func (s *Snower) getMajorityVote(msg *pb.SeqNumMsg, wg *sync.WaitGroup) {
 	}
 
 	if votes.Size() != 0 {
-		// fmt.Println("votes map: ", votes.kvMap)
+		fmt.Println("votes map: ", votes.kvMap)
 		majorityValue, majorityNumVotes := votes.GetKeyWithMostConfidence()
 		if majorityNumVotes >= alpha {
-			s.confidences.IncreaseConfidence(majorityValue)
+			reqConfidenceMap := s.confidences[reqHashStr]
+			reqConfidenceMap.IncreaseConfidence(majorityValue)
 		}
 	}
 }
@@ -143,6 +150,7 @@ func (s *Snower) getMajorityVote(msg *pb.SeqNumMsg, wg *sync.WaitGroup) {
 func (s *Snower) completeRequest(reqId *pb.ReqId) {
 	delete(s.finalSeqNums, string(reqId.Hash))
 	delete(s.hashes, string(reqId.Hash))
+	delete(s.confidences, string(reqId.Hash))
 	//TODO: remove request from s.requests
 }
 
@@ -155,7 +163,7 @@ func CreateSnower(ip string, allIps []string) *Snower {
 	newSnower.requests = make([]string, 0)
 
 	newSnower.allIps = allIps
-	newSnower.confidences = CreateConfidenceMap()
+	newSnower.confidences = make(map[string]ConfidenceMap)
 	newSnower.seqNum = -1
 	newSnower.finalSeqNums = make(map[string]int64)
 
