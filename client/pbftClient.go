@@ -37,6 +37,8 @@ func main() {
 	}
 	defer mainConn.Close()
 
+	fmt.Println("Established connection with %s", mainIp)
+
 	mainClient := pb.NewPbftClient(mainConn)
 
 	for {
@@ -109,7 +111,7 @@ func testThroughPutSameConn(pbfters []string) {
 	mainClient := pb.NewPbftClient(mainConn)
 
 	for i := 0; i < 100; i++ {
-		req := []byte(strconv.Itoa(i)) //TODO: change msg format to: 1 msg1 1
+		req := []byte(fmt.Sprintf("70 msg%d %d", i, i)) // 70 is dummy clientID
 		mainClient.GetReq(context.Background(), &pb.ReqBody{Body: req})
 	}
 }

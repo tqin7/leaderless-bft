@@ -275,6 +275,7 @@ func (p *Pbfter) GetCommit(msg *tp.CommitMsg) (error) {
 		p.CurrentState = nil
 
 		LogStage("Commit", true, p.NodeID)
+		fmt.Println("Testing Timestamp:", time.Now().Unix())
 		LogStage("Reply", true, p.NodeID)
 	}
 
