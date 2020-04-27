@@ -8,6 +8,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	pb "github.com/spockqin/leaderless-bft/proto"
 	"google.golang.org/grpc"
+	//"time"
+
 	// "google.golang.org/grpc/reflection"
 	"net"
 	"sync"
@@ -30,13 +32,13 @@ func (l *Lbfter) LSendReq(ctx context.Context, request *pb.ReqBody) (*pb.Void, e
 
 	LogMsg(req)
 
-	err = l.Pbfter.createStateForNewConsensus()
+	err, seqID := l.createLbftStateForNewConsensus(&req,-1)
 	if err != nil {
 		log.Error("Error when create consensus state")
 		return &pb.Void{}, err
 	}
 
-	prePrepareMsg, err := l.startLbftConsensus(&req)
+	prePrepareMsg, err := l.Pbfter.CurrentState[seqID].StartConsensus(&req, seqID)
 	if err != nil {
 		log.Error("Error when starting consensus [LSendReq]")
 	}
@@ -63,31 +65,53 @@ func (l *Lbfter) runSeqIdConsensus(operation string) {
 	l.Snower.SendReq(context.Background(), &pb.ReqBody{Body: []byte(operation)}) // snowball
 }
 
-func (l *Lbfter) startLbftConsensus(req *tp.PbftReq) (*tp.PrePrepareMsg, error) {
-	reqHash := string(util.HashBytes([]byte(req.Operation)))
-	l.runSeqIdConsensus(req.Operation)
-	req.SequenceID = l.Snower.finalSeqNums[string(reqHash)]
-
-	state := l.Pbfter.CurrentState
-
-	state.MsgLogs.ReqMsg = req
-
-	digest, err := util.Digest(req)
-	if err != nil {
-		log.Error("Error happens when getting digest of request [StartLbftConsensus]")
-		panic(err)
+func (l *Lbfter) createLbftStateForNewConsensus(req *tp.PbftReq, msgSeqID int64) (error, int64) {
+	var lastSeqID int64
+	if len(l.Pbfter.CommittedMsgs) == 0 {
+		lastSeqID = -1
+	} else {
+		lastSeqID = l.Pbfter.CommittedMsgs[len(l.Pbfter.CommittedMsgs) - 1].SequenceID
 	}
 
-	state.CurrentStage = PrePrepared
+	var seqID int64
+	if msgSeqID == -1 {
+		reqHash := string(util.HashBytes([]byte(req.Operation)))
+		l.runSeqIdConsensus(req.Operation)
+		seqID = l.Snower.finalSeqNums[string(reqHash)]
+	} else {
+		seqID = msgSeqID
+	}
 
-	return &tp.PrePrepareMsg{
-		ViewID:               state.ViewID,
-		SequenceID:           l.Snower.finalSeqNums[string(reqHash)],
-		Digest:               digest,
-		Req:                  req,
-		MsgType:			  "PrePrepareMsg",
-	}, nil
+	l.Pbfter.CurrentState[seqID] = createState(l.Pbfter.ViewID, lastSeqID)
+
+	return nil, seqID
 }
+
+//func (l *Lbfter) startLbftConsensus(req *tp.PbftReq, seqID int64) (*tp.PrePrepareMsg, error) {
+//	reqHash := string(util.HashBytes([]byte(req.Operation)))
+//	l.runSeqIdConsensus(req.Operation)
+//	req.SequenceID = l.Snower.finalSeqNums[string(reqHash)]
+//
+//	state := l.Pbfter.CurrentState
+//
+//	state.MsgLogs.ReqMsg = req
+//
+//	digest, err := util.Digest(req)
+//	if err != nil {
+//		log.Error("Error happens when getting digest of request [StartLbftConsensus]")
+//		panic(err)
+//	}
+//
+//	state.CurrentStage = PrePrepared
+//
+//	return &tp.PrePrepareMsg{
+//		ViewID:               state.ViewID,
+//		SequenceID:           l.Snower.finalSeqNums[string(reqHash)],
+//		Digest:               digest,
+//		Req:                  req,
+//		MsgType:			  "PrePrepareMsg",
+//	}, nil
+//}
 
 func CreateLbfter(nodeID string, viewID int64, ip string, allIps []string) *Lbfter {
 	newLbfter := &Lbfter{
@@ -126,7 +150,7 @@ func CreateLbfter(nodeID string, viewID int64, ip string, allIps []string) *Lbft
 		Pbfter:        Pbfter{
 			NodeID:        nodeID,
 			ViewID:        viewID,
-			CurrentState:  nil,
+			CurrentState:  make(map[int64]*State),
 			CommittedMsgs: make([]*tp.PbftReq, 0),
 			MsgBuffer:     &MsgBuffer{
 				ReqMsgs:        make([]*tp.PbftReq, 0),

@@ -8,12 +8,13 @@ import (
 	log "github.com/sirupsen/logrus"
 	pb "github.com/spockqin/leaderless-bft/proto"
 	"google.golang.org/grpc"
+	"sort"
+	tp "github.com/spockqin/leaderless-bft/types"
+	"github.com/spockqin/leaderless-bft/util"
 	// "google.golang.org/grpc/reflection"
 	"net"
 	"sync"
 	"time"
-	tp "github.com/spockqin/leaderless-bft/types"
-	util "github.com/spockqin/leaderless-bft/util"
 )
 
 type Stage int
@@ -48,13 +49,13 @@ type Pbfter struct {
 	Gossiper
 	NodeID        string
 	ViewID        int64
-	CurrentState  *State
+	CurrentState  map[int64]*State
 	CommittedMsgs []*tp.PbftReq
 	MsgBuffer     *MsgBuffer
 	MsgDelivery   chan interface{}
 }
 
-const f = 0; //TODO: set f to (R-1)/3
+const f = 1; //TODO: set f to (R-1)/3
 
 func (p *Pbfter) GetReq(ctx context.Context, request *pb.ReqBody) (*pb.Void, error) {
 	var req tp.PbftReq
@@ -65,12 +66,12 @@ func (p *Pbfter) GetReq(ctx context.Context, request *pb.ReqBody) (*pb.Void, err
 
 	LogMsg(req)
 
-	err = p.createStateForNewConsensus()
+	err, seqID := p.createStateForNewConsensus(-1)
 	if err != nil {
 		return &pb.Void{}, err
 	}
 
-	prePrepareMsg, err := p.CurrentState.StartConsensus(&req)
+	prePrepareMsg, err := p.CurrentState[seqID].StartConsensus(&req, seqID)
 	if err != nil {
 		log.Error("Error happens when starting consensus [SendReq]")
 	}
@@ -91,9 +92,47 @@ func (p *Pbfter) GetReq(ctx context.Context, request *pb.ReqBody) (*pb.Void, err
 	return &pb.Void{}, nil
 }
 
+func (p *Pbfter) CheckCurrentPbfterMatchesThisMessenge(msgs interface{}) bool{
+	if len(p.CurrentState) == 0 {
+		return true
+	}
+	var seqIDs []int64
+	for k := range p.CurrentState {
+		seqIDs = append(seqIDs, k)
+	}
+	sort.Slice(seqIDs, func(i, j int) bool {
+		return seqIDs[i] < seqIDs[j]
+	})
+	switch msgs.(type) {
+	case []*tp.PrePrepareMsg:
+		return true
+	case []*tp.PrepareMsg:
+		for _, msg := range msgs.([]*tp.PrepareMsg) {
+			if seqIDs[len(seqIDs)-1] == msg.SequenceID {
+				return true
+			} else {
+				return false
+			}
+		}
+	case []*tp.CommitMsg:
+		for _, msg := range msgs.([]*tp.CommitMsg) {
+			if seqIDs[len(seqIDs)-1] == msg.SequenceID {
+				return true
+			} else {
+				return false
+			}
+		}
+	}
+	return false
+}
+
 func (p *Pbfter) ResolveMsg() {
 	for {
 		msgs := <-p.MsgDelivery
+		//if !p.CheckCurrentPbfterMatchesThisMessenge(msgs) {
+		//	p.MsgDelivery <- msgs
+		//	return
+		//}
 		switch msgs.(type) {
 		case []*tp.PrePrepareMsg:
 			for _, msg := range msgs.([]*tp.PrePrepareMsg) {
@@ -139,14 +178,14 @@ func (p *Pbfter) ResolveMsg() {
 
 // node sends prePrepare msg
 func (p *Pbfter) GetPrePrepare(msg *tp.PrePrepareMsg) (error) {
-	LogMsg(msg)
-	err := p.createStateForNewConsensus()
+	//LogMsg(msg)
+	err, _ := p.createStateForNewConsensus(msg.SequenceID)
 	if err != nil {
 		log.Error("[GetPrePrepare] createStateForNewConsensus error")
 		panic(err)
 	}
 
-	prePareMsg, err := p.CurrentState.PrePrepare(msg)
+	prePareMsg, err := p.CurrentState[msg.SequenceID].PrePrepare(msg)
 	if err != nil {
 		log.Error("[GetPrePrepare] PrePrepare error")
 		panic(err)
@@ -155,6 +194,8 @@ func (p *Pbfter) GetPrePrepare(msg *tp.PrePrepareMsg) (error) {
 	if prePareMsg != nil {
 		prePareMsg.NodeID = p.NodeID
 		LogStage("Pre-prepare", true, p.NodeID)
+		// add msg to its own msglogs
+		p.CurrentState[msg.SequenceID].MsgLogs.PrepareMsgs[p.NodeID] = prePareMsg
 		prepareMsgBytes, err := json.Marshal(*prePareMsg)
 		if err != nil {
 			return errors.New("[GetPrePrepare] prepareMsg marshal error!")
@@ -166,7 +207,7 @@ func (p *Pbfter) GetPrePrepare(msg *tp.PrePrepareMsg) (error) {
 			}
 			defer cancel()
 		}
-		LogStage("Prepare", false, p.NodeID)
+		//LogStage("Prepare", false, p.NodeID)
 	} else {
 		panic(errors.New("[GetPrePrepare] get empty prepareMsg"))
 	}
@@ -193,11 +234,11 @@ func (state *State) PrePrepare(prePrepareMsg *tp.PrePrepareMsg) (*tp.PrepareMsg,
 	}, nil
 }
 
-// node sends prepare msg
+// node handles prepare msg
 func (p *Pbfter) GetPrepare(msg *tp.PrepareMsg) (error) {
-	LogMsg(msg)
+	//LogMsg(msg)
 
-	commitMsg, err := p.CurrentState.Prepare(msg)
+	commitMsg, err := p.CurrentState[msg.SequenceID].Prepare(msg)
 	if err != nil {
 		log.Error(err)
 	}
@@ -205,6 +246,8 @@ func (p *Pbfter) GetPrepare(msg *tp.PrepareMsg) (error) {
 	if commitMsg != nil {
 		commitMsg.NodeID = p.NodeID
 		LogStage("Prepare", true, p.NodeID)
+		// add msg to its own msglogs
+		p.CurrentState[msg.SequenceID].MsgLogs.CommitMsgs[p.NodeID] = commitMsg
 		commitMsgBytes, err := json.Marshal(*commitMsg)
 		if err != nil {
 			return errors.New("[GetPrepare] commitMsg marshal error!")
@@ -216,7 +259,7 @@ func (p *Pbfter) GetPrepare(msg *tp.PrepareMsg) (error) {
 			}
 			defer cancel()
 		}
-		LogStage("Commit", false, p.NodeID)
+		//LogStage("Commit", false, p.NodeID)
 	}
 
 	return nil
@@ -232,7 +275,7 @@ func (state *State) Prepare(prepareMsg *tp.PrepareMsg) (*tp.CommitMsg, error)  {
 	state.MsgLogs.PrepareMsgs[prepareMsg.NodeID] = prepareMsg
 
 	// Print current voting status
-	fmt.Printf("[Prepare-Vote]: %d\n", len(state.MsgLogs.PrepareMsgs))
+	//fmt.Printf("[Prepare-Vote]: %d\n", len(state.MsgLogs.PrepareMsgs))
 
 	if state.prepared() {
 		// Change the stage to prepared.
@@ -249,13 +292,11 @@ func (state *State) Prepare(prepareMsg *tp.PrepareMsg) (*tp.CommitMsg, error)  {
 	return nil, errors.New("[Prepare] haven't received 2f+1 prepare msg")
 }
 
-// node sends commit msg
+// node handles commit msg
 func (p *Pbfter) GetCommit(msg *tp.CommitMsg) (error) {
-	LogMsg(msg)
+	//LogMsg(msg)
 
-	fmt.Println("node is in GetCommit")
-
-	replyMsg, committedReq, err := p.CurrentState.Commit(msg)
+	replyMsg, committedReq, err := p.CurrentState[msg.SequenceID].Commit(msg)
 	if err != nil {
 		fmt.Println("GetCommit Error")
 		log.Error(err)
@@ -269,13 +310,15 @@ func (p *Pbfter) GetCommit(msg *tp.CommitMsg) (error) {
 		replyMsg.NodeID = p.NodeID
 		p.CommittedMsgs = append(p.CommittedMsgs, committedReq)
 
-		log.WithFields(log.Fields{
-				"ip": p.ip,
-			}).Info("Set Pbft state to nil\n")
-		p.CurrentState = nil
+		log.Info("Current Node: ", p.NodeID, " Received Commit Msgs: ", p.CurrentState[msg.SequenceID].MsgLogs.CommitMsgs)
+
+		//log.WithFields(log.Fields{
+		//		"ip": p.ip,
+		//	}).Info("Set Pbft state to nil\n")
+		p.CurrentState[msg.SequenceID] = nil
 
 		LogStage("Commit", true, p.NodeID)
-		fmt.Println("Testing Timestamp:", time.Now().Unix())
+		//fmt.Println("Testing Timestamp:", time.Now().Unix())
 		LogStage("Reply", true, p.NodeID)
 	}
 
@@ -313,11 +356,7 @@ func (state *State) Commit(commitMsg *tp.CommitMsg) (*tp.ReplyMsg, *tp.PbftReq, 
 	return nil, nil, errors.New("[Commit] haven't received 2f+1 commit msg")
 }
 
-func (p *Pbfter) createStateForNewConsensus() error {
-	if p.CurrentState != nil {
-		return errors.New("another consensus is ongoing")
-	}
-
+func (p *Pbfter) createStateForNewConsensus(msgSeqID int64) (error, int64) {
 	var lastSeqID int64
 	if len(p.CommittedMsgs) == 0 {
 		lastSeqID = -1
@@ -325,9 +364,21 @@ func (p *Pbfter) createStateForNewConsensus() error {
 		lastSeqID = p.CommittedMsgs[len(p.CommittedMsgs) - 1].SequenceID
 	}
 
-	p.CurrentState = createState(p.ViewID, lastSeqID)
+	var seqID int64
+	if msgSeqID == -1 {
+		seqID = time.Now().UnixNano()
+		if lastSeqID != -1 {
+			for lastSeqID >= seqID {
+				seqID += 1
+			}
+		}
+	} else {
+		seqID = msgSeqID
+	}
 
-	return nil
+	p.CurrentState[seqID] = createState(p.ViewID, lastSeqID)
+
+	return nil, seqID
 }
 
 func createState (viewID int64, seqID int64) *State {
@@ -343,15 +394,7 @@ func createState (viewID int64, seqID int64) *State {
 	}
 }
 
-func (state *State) StartConsensus(req *tp.PbftReq) (*tp.PrePrepareMsg, error) {
-	seqID := time.Now().UnixNano()
-
-	if state.LastSequenceID != -1 {
-		for state.LastSequenceID >= seqID {
-			seqID += 1
-		}
-	}
-
+func (state *State) StartConsensus(req *tp.PbftReq, seqID int64) (*tp.PrePrepareMsg, error) {
 	req.SequenceID = seqID
 
 	state.MsgLogs.ReqMsg = req
@@ -416,7 +459,7 @@ func CreatePbfter(nodeID string, viewID int64, ip string, allIps []string) *Pbft
 		},
 		NodeID:        nodeID,
 		ViewID:        viewID,
-		CurrentState:  nil,
+		CurrentState:  make(map[int64]*State),
 		CommittedMsgs: make([]*tp.PbftReq, 0),
 		MsgBuffer:     &MsgBuffer{
 			ReqMsgs:        make([]*tp.PbftReq, 0),

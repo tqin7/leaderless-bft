@@ -25,31 +25,35 @@ func (p *Pbfter) GetMsgFromGossip(){
 				}
 				p.RouteMsg(&prePrepareMsg)
 			} else if strings.Contains(req, "PrepareMsg") {
-				log.WithFields(log.Fields{
-					"ip": p.ip,
-				}).Info("got PrepareMsg")
 				var prePareMsg tp.PrepareMsg
 				err := json.Unmarshal([]byte(req), &prePareMsg)
+				log.WithFields(log.Fields{
+					"ip": p.ip,
+					"from": prePareMsg.NodeID,
+				}).Info("got PrepareMsg")
 				if err != nil {
 					panic(errors.New("[GetMsgFromGossip] unmarshal PrepareMsg error"))
 				}
 				p.RouteMsg(&prePareMsg)
 			} else if strings.Contains(req, "CommitMsg") {
-				log.WithFields(log.Fields{
-					"ip": p.ip,
-				}).Info("got CommitMsg")
+
 				var commitMsg tp.CommitMsg
 				err := json.Unmarshal([]byte(req), &commitMsg)
+				log.WithFields(log.Fields{
+					"ip": p.ip,
+					"from": commitMsg.NodeID,
+				}).Info("got CommitMsg")
 				if err != nil {
 					panic(errors.New("[GetMsgFromGossip] unmarshal CommitMsg error"))
 				}
 				p.RouteMsg(&commitMsg)
 			} else if strings.Contains(req, "ReplyMsg") {
-				log.WithFields(log.Fields{
-					"ip": p.ip,
-				}).Info("got ReplyMsg")
 				var replyMsg tp.ReplyMsg
 				err := json.Unmarshal([]byte(req), &replyMsg)
+				log.WithFields(log.Fields{
+					"ip": p.ip,
+					"from": replyMsg.NodeID,
+				}).Info("got ReplyMsg")
 				if err != nil {
 					panic(errors.New("[GetMsgFromGossip] unmarshal ReplyMsg error"))
 				}
@@ -66,7 +70,8 @@ func (p *Pbfter) GetMsgFromGossip(){
 func (p *Pbfter) RouteMsg(msg interface{}) []error{
 	switch msg.(type) {
 	case *tp.PrePrepareMsg:
-		if p.CurrentState == nil {
+		_, ok := p.CurrentState[msg.(*tp.PrePrepareMsg).SequenceID]
+		if !ok {
 			msgs := make([]*tp.PrePrepareMsg, len(p.MsgBuffer.PrePrepareMsgs))
 			copy(msgs, p.MsgBuffer.PrePrepareMsgs)
 			msgs = append(msgs, msg.(*tp.PrePrepareMsg))
@@ -76,7 +81,11 @@ func (p *Pbfter) RouteMsg(msg interface{}) []error{
 			p.MsgBuffer.PrePrepareMsgs = append(p.MsgBuffer.PrePrepareMsgs, msg.(*tp.PrePrepareMsg))
 		}
 	case *tp.PrepareMsg:
-		if p.CurrentState == nil || p.CurrentState.CurrentStage != PrePrepared {
+		if (msg.(*tp.PrepareMsg).NodeID == p.NodeID) {
+			return nil
+		}
+		state, ok := p.CurrentState[msg.(*tp.PrepareMsg).SequenceID]
+		if !ok || (ok && (state.CurrentStage != PrePrepared)) {
 			p.MsgBuffer.PrepareMsgs = append(p.MsgBuffer.PrepareMsgs, msg.(*tp.PrepareMsg))
 		} else {
 			msgs := make([]*tp.PrepareMsg, len(p.MsgBuffer.PrepareMsgs))
@@ -86,7 +95,15 @@ func (p *Pbfter) RouteMsg(msg interface{}) []error{
 			p.MsgDelivery <- msgs
 		}
 	case *tp.CommitMsg:
-		if p.CurrentState == nil || p.CurrentState.CurrentStage != Prepared {
+		if (msg.(*tp.CommitMsg).NodeID == p.NodeID) {
+			return nil
+		}
+		state, ok := p.CurrentState[msg.(*tp.CommitMsg).SequenceID]
+		if ok && state == nil {
+			// this consensus has ended
+			return nil
+		}
+		if !ok || (ok && (state.CurrentStage != Prepared)) {
 			p.MsgBuffer.CommitMsgs = append(p.MsgBuffer.CommitMsgs, msg.(*tp.CommitMsg))
 		} else {
 			msgs := make([]*tp.CommitMsg, len(p.MsgBuffer.CommitMsgs))

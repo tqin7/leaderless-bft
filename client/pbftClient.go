@@ -37,7 +37,7 @@ func main() {
 	}
 	defer mainConn.Close()
 
-	fmt.Println("Established connection with %s", mainIp)
+	fmt.Println("Established connection with ", mainIp)
 
 	mainClient := pb.NewPbftClient(mainConn)
 

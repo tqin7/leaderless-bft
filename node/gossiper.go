@@ -1,16 +1,14 @@
 package proto
 
 import (
-	"fmt"
-	"sync"
 	"context"
-	pb "github.com/spockqin/leaderless-bft/proto"
 	log "github.com/sirupsen/logrus"
-	"github.com/spockqin/leaderless-bft/util"
-	"net"
-	"google.golang.org/grpc"
-	"time"
+	pb "github.com/spockqin/leaderless-bft/proto"
 	"github.com/spockqin/leaderless-bft/types"
+	"github.com/spockqin/leaderless-bft/util"
+	"google.golang.org/grpc"
+	"net"
+	"sync"
 )
 
 // Structure of each gossiper
@@ -44,14 +42,14 @@ func (g *Gossiper) Poke(ctx context.Context, reqId *pb.ReqId) (*pb.Bool, error) 
 		g.pokedLock.Unlock()
 	}
 
-	log.WithFields(log.Fields{
-		"ip": g.ip,
-		"exists": exists,
-	}).Info("got poked")
+	//log.WithFields(log.Fields{
+	//	"ip": g.ip,
+	//	"exists": exists,
+	//}).Info("got poked")
 
 	// log.Info("Timestamp: ",
 	// 	time.Now().Format("2006-01-01 15:04:05 .000"))
-	fmt.Println("Testing Timestamp:", time.Now().Unix())
+	//fmt.Println("Testing Timestamp:", time.Now().Unix())
 
 	return &pb.Bool{Status: exists}, nil
 }
@@ -71,10 +69,10 @@ func (g *Gossiper) Push(ctx context.Context, reqBody *pb.ReqBody) (*pb.Void, err
 	delete(g.poked, string(reqHash))
 	g.pokedLock.Unlock()
 
-	log.WithFields(log.Fields{
-		"ip": g.ip,
-		"request": string(reqBody.Body),
-	}).Info("stored new request")
+	//log.WithFields(log.Fields{
+	//	"ip": g.ip,
+	//	"request": string(reqBody.Body),
+	//}).Info("stored new request")
 
 	// each connection opens a socket
 	// to check # of max sockets open at once, run "ulimit -n"
@@ -126,17 +124,17 @@ func (g *Gossiper) sendGossip(neighborIp string, request []byte, c chan bool) {
 			"error": err,
 		}).Info("failed to poke peer\n")
 	} else {
-		log.WithFields(log.Fields{
-			"ip": g.ip,
-			"peer": neighborIp,
-			"exists": exists.Status,
-		}).Info("poked peer\n")
+		//log.WithFields(log.Fields{
+		//	"ip": g.ip,
+		//	"peer": neighborIp,
+		//	"exists": exists.Status,
+		//}).Info("poked peer\n")
 		if !exists.Status { // if peer doesn't have this hash
-			log.WithFields(log.Fields{
-				"ip": g.ip,
-				"peer": neighborIp,
-				"request": string(request),
-			}).Info("push request to peer\n")
+			//log.WithFields(log.Fields{
+			//	"ip": g.ip,
+			//	"peer": neighborIp,
+			//	"request": string(request),
+			//}).Info("push request to peer\n")
 			client.Push(ctx, &pb.ReqBody{Body: request}, grpc.WaitForReady(true))
 		}
 	}
