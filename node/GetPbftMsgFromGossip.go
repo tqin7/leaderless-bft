@@ -11,9 +11,12 @@ import (
 
 func (p *Pbfter) GetMsgFromGossip(){
 	for {
+		log.Info("Node: ", p.NodeID, "  receives msg from Gossip ", p.requests)
 		p.requestsLock.Lock()
-
-		for _, req := range p.requests {
+		requests := p.requests
+		p.requests = make([]string, 0)
+		p.requestsLock.Unlock()
+		for _, req := range requests {
 			if strings.Contains(req, "PrePrepareMsg") {
 				log.WithFields(log.Fields{
 					"ip": p.ip,
@@ -61,8 +64,6 @@ func (p *Pbfter) GetMsgFromGossip(){
 			}
 		}
 
-		p.requests = make([]string, 0)
-		p.requestsLock.Unlock()
 		time.Sleep(3 * time.Second)
 	}
 }
@@ -77,9 +78,10 @@ func (p *Pbfter) RouteMsg(msg interface{}) []error{
 			msgs = append(msgs, msg.(*tp.PrePrepareMsg))
 			p.MsgBuffer.PrePrepareMsgs = make([]*tp.PrePrepareMsg, 0)
 			p.MsgDelivery <- msgs
-		} else {
-			p.MsgBuffer.PrePrepareMsgs = append(p.MsgBuffer.PrePrepareMsgs, msg.(*tp.PrePrepareMsg))
 		}
+		//else {
+		//	p.MsgBuffer.PrePrepareMsgs = append(p.MsgBuffer.PrePrepareMsgs, msg.(*tp.PrePrepareMsg))
+		//}
 	case *tp.PrepareMsg:
 		if (msg.(*tp.PrepareMsg).NodeID == p.NodeID) {
 			return nil

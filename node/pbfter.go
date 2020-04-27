@@ -184,13 +184,11 @@ func (p *Pbfter) GetPrePrepare(msg *tp.PrePrepareMsg) (error) {
 		log.Error("[GetPrePrepare] createStateForNewConsensus error")
 		panic(err)
 	}
-
 	prePareMsg, err := p.CurrentState[msg.SequenceID].PrePrepare(msg)
 	if err != nil {
 		log.Error("[GetPrePrepare] PrePrepare error")
 		panic(err)
 	}
-
 	if prePareMsg != nil {
 		prePareMsg.NodeID = p.NodeID
 		LogStage("Pre-prepare", true, p.NodeID)
@@ -200,12 +198,12 @@ func (p *Pbfter) GetPrePrepare(msg *tp.PrePrepareMsg) (error) {
 		if err != nil {
 			return errors.New("[GetPrePrepare] prepareMsg marshal error!")
 		} else {
-			ctx, cancel := context.WithTimeout(context.Background(), tp.GRPC_TIMEOUT)
-			_, pushErr := p.Push(ctx, &pb.ReqBody{Body:prepareMsgBytes})
+			//ctx, cancel := context.WithTimeout(context.Background(), tp.GRPC_TIMEOUT)
+			_, pushErr := p.Push(context.Background(), &pb.ReqBody{Body:prepareMsgBytes})
 			if pushErr != nil {
 				panic(errors.New("[GetPrePrepare] push prepareMsgBytes error!"))
 			}
-			defer cancel()
+			//defer cancel()
 		}
 		//LogStage("Prepare", false, p.NodeID)
 	} else {
@@ -252,12 +250,12 @@ func (p *Pbfter) GetPrepare(msg *tp.PrepareMsg) (error) {
 		if err != nil {
 			return errors.New("[GetPrepare] commitMsg marshal error!")
 		} else {
-			ctx, cancel := context.WithTimeout(context.Background(), tp.GRPC_TIMEOUT)
-			_, pushErr := p.Push(ctx, &pb.ReqBody{Body:commitMsgBytes})
+			//ctx, cancel := context.WithTimeout(context.Background(), tp.GRPC_TIMEOUT)
+			_, pushErr := p.Push(context.Background(), &pb.ReqBody{Body:commitMsgBytes})
 			if pushErr != nil {
 				panic(errors.New("[GetPrepare] push commitMsg error!"))
 			}
-			defer cancel()
+			//defer cancel()
 		}
 		//LogStage("Commit", false, p.NodeID)
 	}

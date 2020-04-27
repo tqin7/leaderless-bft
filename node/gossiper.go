@@ -28,7 +28,7 @@ type Gossiper struct {
 
 func (g *Gossiper) Poke(ctx context.Context, reqId *pb.ReqId) (*pb.Bool, error) {
 	hashString := string(reqId.Hash)
-	
+
 	g.hashesLock.Lock()
 	exists := g.hashes[hashString]
 	g.hashesLock.Unlock()
@@ -55,24 +55,23 @@ func (g *Gossiper) Poke(ctx context.Context, reqId *pb.ReqId) (*pb.Bool, error) 
 }
 
 func (g *Gossiper) Push(ctx context.Context, reqBody *pb.ReqBody) (*pb.Void, error) {
+	g.hashesLock.Lock()
 	reqHash := util.HashBytes(reqBody.Body)
+	g.hashes[string(reqHash)] = true
+	g.hashesLock.Unlock()
 
 	g.requestsLock.Lock()
 	g.requests = append(g.requests, string(reqBody.Body))
 	g.requestsLock.Unlock()
 
-	g.hashesLock.Lock()
-	g.hashes[string(reqHash)] = true
-	g.hashesLock.Unlock()
-
 	g.pokedLock.Lock()
 	delete(g.poked, string(reqHash))
 	g.pokedLock.Unlock()
 
-	//log.WithFields(log.Fields{
-	//	"ip": g.ip,
-	//	"request": string(reqBody.Body),
-	//}).Info("stored new request")
+	log.WithFields(log.Fields{
+		"ip": g.ip,
+		"request": string(reqBody.Body),
+	}).Info("stored new request")
 
 	// each connection opens a socket
 	// to check # of max sockets open at once, run "ulimit -n"
@@ -130,11 +129,11 @@ func (g *Gossiper) sendGossip(neighborIp string, request []byte, c chan bool) {
 		//	"exists": exists.Status,
 		//}).Info("poked peer\n")
 		if !exists.Status { // if peer doesn't have this hash
-			//log.WithFields(log.Fields{
-			//	"ip": g.ip,
-			//	"peer": neighborIp,
-			//	"request": string(request),
-			//}).Info("push request to peer\n")
+			log.WithFields(log.Fields{
+				"ip": g.ip,
+				"peer": neighborIp,
+				// "request": string(request),
+			}).Info("push request to peer\n")
 			client.Push(ctx, &pb.ReqBody{Body: request}, grpc.WaitForReady(true))
 		}
 	}
