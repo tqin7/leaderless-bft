@@ -3,15 +3,13 @@ package proto
 import (
 	"encoding/json"
 	"errors"
-	"strings"
 	tp "github.com/spockqin/leaderless-bft/types"
+	"strings"
 	"time"
-	log "github.com/sirupsen/logrus"
 )
 
 func (p *Pbfter) GetMsgFromGossip(){
 	for {
-		log.Info("Node: ", p.NodeID, "  receives msg from Gossip ", p.requests)
 		p.requestsLock.Lock()
 		requests := p.requests
 		p.requests = make([]string, 0)
@@ -23,7 +21,7 @@ func (p *Pbfter) GetMsgFromGossip(){
 				}).Info("got PrePrepareMsg")
 				var prePrepareMsg tp.PrePrepareMsg
 				err := json.Unmarshal([]byte(req), &prePrepareMsg)
-				if err != nil {	
+				if err != nil {
 					panic(errors.New("[GetMsgFromGossip] unmarshal PrePrepareMsg error"))
 				}
 				p.RouteMsg(&prePrepareMsg)
@@ -87,6 +85,10 @@ func (p *Pbfter) RouteMsg(msg interface{}) []error{
 			return nil
 		}
 		state, ok := p.CurrentState[msg.(*tp.PrepareMsg).SequenceID]
+		if ok && (state == nil) {
+			// this consensus has ended
+			return nil
+		}
 		if !ok || (ok && (state.CurrentStage != PrePrepared)) {
 			p.MsgBuffer.PrepareMsgs = append(p.MsgBuffer.PrepareMsgs, msg.(*tp.PrepareMsg))
 		} else {
@@ -101,7 +103,7 @@ func (p *Pbfter) RouteMsg(msg interface{}) []error{
 			return nil
 		}
 		state, ok := p.CurrentState[msg.(*tp.CommitMsg).SequenceID]
-		if ok && state == nil {
+		if ok && (state == nil) {
 			// this consensus has ended
 			return nil
 		}

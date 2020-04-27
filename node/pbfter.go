@@ -126,6 +126,19 @@ func (p *Pbfter) CheckCurrentPbfterMatchesThisMessenge(msgs interface{}) bool{
 	return false
 }
 
+func (p *Pbfter) CheckCommittedMsg(seqID int64) bool{
+	flag := false
+	if p.CommittedMsgs != nil {
+		for _, commitedMsg := range p.CommittedMsgs {
+			if seqID == commitedMsg.SequenceID {
+				flag = true
+				break
+			}
+		}
+	}
+	return flag
+}
+
 func (p *Pbfter) ResolveMsg() {
 	for {
 		msgs := <-p.MsgDelivery
@@ -144,6 +157,10 @@ func (p *Pbfter) ResolveMsg() {
 			}
 		case []*tp.PrepareMsg:
 			for _, msg := range msgs.([]*tp.PrepareMsg) {
+				if p.CheckCommittedMsg(msg.SequenceID) {
+					continue
+				}
+
 				err := p.GetPrepare(msg)
 				if err != nil {
 					log.Error("[ResolveMsg] resolve Prepare Error")
@@ -152,17 +169,8 @@ func (p *Pbfter) ResolveMsg() {
 			}
 		case []*tp.CommitMsg:
 			for _, msg := range msgs.([]*tp.CommitMsg) {
-				if p.CommittedMsgs != nil {
-					flag := false
-					for _, commitedMsg := range p.CommittedMsgs {
-						if msg.SequenceID == commitedMsg.SequenceID {
-							flag = true
-							break
-						}
-					}
-					if flag {
-						continue
-					}
+				if p.CheckCommittedMsg(msg.SequenceID) {
+					continue
 				}
 
 				err := p.GetCommit(msg)
@@ -308,7 +316,7 @@ func (p *Pbfter) GetCommit(msg *tp.CommitMsg) (error) {
 		replyMsg.NodeID = p.NodeID
 		p.CommittedMsgs = append(p.CommittedMsgs, committedReq)
 
-		log.Info("Current Node: ", p.NodeID, " Received Commit Msgs: ", p.CurrentState[msg.SequenceID].MsgLogs.CommitMsgs)
+		//log.Info("Current Node: ", p.NodeID, " Received Commit Msgs: ", p.CurrentState[msg.SequenceID].MsgLogs.CommitMsgs)
 
 		//log.WithFields(log.Fields{
 		//		"ip": p.ip,
@@ -317,6 +325,7 @@ func (p *Pbfter) GetCommit(msg *tp.CommitMsg) (error) {
 
 		LogStage("Commit", true, p.NodeID)
 		//fmt.Println("Testing Timestamp:", time.Now().Unix())
+		log.Info("Committed message: ", msg)
 		LogStage("Reply", true, p.NodeID)
 	}
 
