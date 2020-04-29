@@ -9,7 +9,6 @@ import (
 	pb "github.com/spockqin/leaderless-bft/proto"
 	"google.golang.org/grpc"
 	//"time"
-
 	// "google.golang.org/grpc/reflection"
 	"net"
 	"sync"

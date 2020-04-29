@@ -68,10 +68,10 @@ func (g *Gossiper) Push(ctx context.Context, reqBody *pb.ReqBody) (*pb.Void, err
 	delete(g.poked, string(reqHash))
 	g.pokedLock.Unlock()
 
-	log.WithFields(log.Fields{
-		"ip": g.ip,
-		"request": string(reqBody.Body),
-	}).Info("stored new request")
+	// log.WithFields(log.Fields{
+	// 	"ip": g.ip,
+	// 	"request": string(reqBody.Body),
+	// }).Info("stored new request")
 
 	// each connection opens a socket
 	// to check # of max sockets open at once, run "ulimit -n"
@@ -112,9 +112,9 @@ func (g *Gossiper) sendGossip(neighborIp string, request []byte, c chan bool) {
 
 	client := pb.NewGossipClient(conn)
 
-	ctx, cancel := context.WithTimeout(context.Background(), types.GRPC_TIMEOUT)
-	exists, err := client.Poke(ctx, &pb.ReqId{Hash: reqHash}, grpc.WaitForReady(true))
-	defer cancel()
+	// ctx, cancel := context.WithTimeout(context.Background(), types.GRPC_TIMEOUT)
+	exists, err := client.Poke(context.Background(), &pb.ReqId{Hash: reqHash}, grpc.WaitForReady(true))
+	// defer cancel()
 
 	if err != nil {
 		log.WithFields(log.Fields{
@@ -129,12 +129,7 @@ func (g *Gossiper) sendGossip(neighborIp string, request []byte, c chan bool) {
 		//	"exists": exists.Status,
 		//}).Info("poked peer\n")
 		if !exists.Status { // if peer doesn't have this hash
-			log.WithFields(log.Fields{
-				"ip": g.ip,
-				"peer": neighborIp,
-				// "request": string(request),
-			}).Info("push request to peer\n")
-			client.Push(ctx, &pb.ReqBody{Body: request}, grpc.WaitForReady(true))
+			client.Push(context.Background(), &pb.ReqBody{Body: request}, grpc.WaitForReady(true))
 		}
 	}
 }

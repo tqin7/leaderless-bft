@@ -67,26 +67,7 @@ func main() {
 		case msgStr == "throughput same":
 			testThroughPutSameConn(pbfters)
 		default:
-			elements := strings.Split(msgStr,  " ")
-			timeStamp, err := strconv.ParseInt(elements[2], 10, 64)
-			if err != nil {
-				fmt.Printf("err happens when converting timestamp to int64")
-				panic(err)
-			}
-			req := &tp.PbftReq{
-				ClientID:  	elements[0],
-				Operation:  elements[1],
-				Timestamp:  timeStamp,
-				SequenceID: 0,
-				MsgType:    "PbftReq",
-			}
-
-			reqBytes, err := json.Marshal(req)
-			if err != nil {
-				log.Error("client marshal request error!")
-				panic(err)
-			}
-
+			reqBytes := constructPbftReqBytes(msgStr)
 			_, err = mainClient.GetReq(context.Background(), &pb.ReqBody{Body:reqBytes})
 			if err != nil {
 				log.Error("Client sendReq error!")
@@ -94,6 +75,29 @@ func main() {
 			}
 		}
 	}
+}
+
+func constructPbftReqBytes(msgStr string) []byte {
+	elements := strings.Split(msgStr,  " ")
+	timeStamp, err := strconv.ParseInt(elements[2], 10, 64)
+	if err != nil {
+		fmt.Printf("err happens when converting timestamp to int64")
+		panic(err)
+	}
+	req := &tp.PbftReq{
+		ClientID:  	elements[0],
+		Operation:  elements[1],
+		Timestamp:  timeStamp,
+		SequenceID: 0,
+		MsgType:    "PbftReq",
+	}
+
+	reqBytes, err := json.Marshal(req)
+	if err != nil {
+		log.Error("client marshal request error!")
+		panic(err)
+	}
+	return reqBytes
 }
 
 func testThroughPutSameConn(pbfters []string) {
@@ -110,8 +114,9 @@ func testThroughPutSameConn(pbfters []string) {
 
 	mainClient := pb.NewPbftClient(mainConn)
 
-	for i := 0; i < 100; i++ {
-		req := []byte(fmt.Sprintf("70 msg%d %d", i, i)) // 70 is dummy clientID
-		mainClient.GetReq(context.Background(), &pb.ReqBody{Body: req})
+	for i := 0; i < 20; i++ {
+		msgStr := fmt.Sprintf("%d %d %d", i, i, i)
+		reqBytes := constructPbftReqBytes(msgStr)
+		mainClient.GetReq(context.Background(), &pb.ReqBody{Body: reqBytes})
 	}
 }

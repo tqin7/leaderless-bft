@@ -50,6 +50,8 @@ type Pbfter struct {
 	NodeID        string
 	ViewID        int64
 	CurrentState  map[int64]*State
+	CurrentStateLock sync.Mutex
+	// CurrentState sync.Map
 	CommittedMsgs []*tp.PbftReq
 	MsgBuffer     *MsgBuffer
 	MsgDelivery   chan interface{}
@@ -64,14 +66,18 @@ func (p *Pbfter) GetReq(ctx context.Context, request *pb.ReqBody) (*pb.Void, err
 		log.Error("Error happens when unmarshal request [GetReq]")
 	}
 
-	LogMsg(req)
+	// LogMsg(req)
 
 	err, seqID := p.createStateForNewConsensus(-1)
 	if err != nil {
 		return &pb.Void{}, err
 	}
 
-	prePrepareMsg, err := p.CurrentState[seqID].StartConsensus(&req, seqID)
+	p.CurrentStateLock.Lock()
+	state := p.CurrentState[seqID]
+	p.CurrentStateLock.Unlock()
+	prePrepareMsg, err := state.StartConsensus(&req, seqID)
+	// prePrepareMsg, err := p.CurrentState.Load(seqID).StartConsensus(&req, seqID)
 	if err != nil {
 		log.Error("Error happens when starting consensus [SendReq]")
 	}
@@ -87,19 +93,25 @@ func (p *Pbfter) GetReq(ctx context.Context, request *pb.ReqBody) (*pb.Void, err
 		}
 	}
 
-	LogStage("Pre-prepare", true, p.NodeID)
+	// LogStage("Pre-prepare", true, p.NodeID)
 
 	return &pb.Void{}, nil
 }
 
 func (p *Pbfter) CheckCurrentPbfterMatchesThisMessenge(msgs interface{}) bool{
-	if len(p.CurrentState) == 0 {
+	p.CurrentStateLock.Lock()
+	stateLen := len(p.CurrentState)
+	p.CurrentStateLock.Unlock()
+	if stateLen == 0 {
 		return true
 	}
 	var seqIDs []int64
+	p.CurrentStateLock.Lock()
 	for k := range p.CurrentState {
 		seqIDs = append(seqIDs, k)
 	}
+	p.CurrentStateLock.Unlock()
+	
 	sort.Slice(seqIDs, func(i, j int) bool {
 		return seqIDs[i] < seqIDs[j]
 	})
@@ -192,16 +204,19 @@ func (p *Pbfter) GetPrePrepare(msg *tp.PrePrepareMsg) (error) {
 		log.Error("[GetPrePrepare] createStateForNewConsensus error")
 		panic(err)
 	}
-	prePareMsg, err := p.CurrentState[msg.SequenceID].PrePrepare(msg)
+	p.CurrentStateLock.Lock()
+	state := p.CurrentState[msg.SequenceID]
+	p.CurrentStateLock.Unlock()
+	prePareMsg, err := state.PrePrepare(msg)
 	if err != nil {
 		log.Error("[GetPrePrepare] PrePrepare error")
 		panic(err)
 	}
 	if prePareMsg != nil {
 		prePareMsg.NodeID = p.NodeID
-		LogStage("Pre-prepare", true, p.NodeID)
+		// LogStage("Pre-prepare", true, p.NodeID)
 		// add msg to its own msglogs
-		p.CurrentState[msg.SequenceID].MsgLogs.PrepareMsgs[p.NodeID] = prePareMsg
+		state.MsgLogs.PrepareMsgs[p.NodeID] = prePareMsg
 		prepareMsgBytes, err := json.Marshal(*prePareMsg)
 		if err != nil {
 			return errors.New("[GetPrePrepare] prepareMsg marshal error!")
@@ -244,16 +259,19 @@ func (state *State) PrePrepare(prePrepareMsg *tp.PrePrepareMsg) (*tp.PrepareMsg,
 func (p *Pbfter) GetPrepare(msg *tp.PrepareMsg) (error) {
 	//LogMsg(msg)
 
-	commitMsg, err := p.CurrentState[msg.SequenceID].Prepare(msg)
+	p.CurrentStateLock.Lock()
+	state := p.CurrentState[msg.SequenceID]
+	p.CurrentStateLock.Unlock()
+	commitMsg, err := state.Prepare(msg)
 	if err != nil {
-		log.Error(err)
+		log.Info(err)
 	}
 
 	if commitMsg != nil {
 		commitMsg.NodeID = p.NodeID
-		LogStage("Prepare", true, p.NodeID)
+		// LogStage("Prepare", true, p.NodeID)
 		// add msg to its own msglogs
-		p.CurrentState[msg.SequenceID].MsgLogs.CommitMsgs[p.NodeID] = commitMsg
+		state.MsgLogs.CommitMsgs[p.NodeID] = commitMsg
 		commitMsgBytes, err := json.Marshal(*commitMsg)
 		if err != nil {
 			return errors.New("[GetPrepare] commitMsg marshal error!")
@@ -295,17 +313,19 @@ func (state *State) Prepare(prepareMsg *tp.PrepareMsg) (*tp.CommitMsg, error)  {
 		}, nil
 	}
 
-	return nil, errors.New("[Prepare] haven't received 2f+1 prepare msg")
+	return nil, errors.New("[Prepare] haven't received 2f+1 prepare msg yet")
 }
 
 // node handles commit msg
 func (p *Pbfter) GetCommit(msg *tp.CommitMsg) (error) {
 	//LogMsg(msg)
 
-	replyMsg, committedReq, err := p.CurrentState[msg.SequenceID].Commit(msg)
+	p.CurrentStateLock.Lock()
+	state := p.CurrentState[msg.SequenceID]
+	p.CurrentStateLock.Unlock()
+	replyMsg, committedReq, err := state.Commit(msg)
 	if err != nil {
-		fmt.Println("GetCommit Error")
-		log.Error(err)
+		log.Info(err)
 	} 
 
 	if replyMsg != nil {
@@ -316,17 +336,15 @@ func (p *Pbfter) GetCommit(msg *tp.CommitMsg) (error) {
 		replyMsg.NodeID = p.NodeID
 		p.CommittedMsgs = append(p.CommittedMsgs, committedReq)
 
-		//log.Info("Current Node: ", p.NodeID, " Received Commit Msgs: ", p.CurrentState[msg.SequenceID].MsgLogs.CommitMsgs)
-
-		//log.WithFields(log.Fields{
-		//		"ip": p.ip,
-		//	}).Info("Set Pbft state to nil\n")
+		p.CurrentStateLock.Lock()
 		p.CurrentState[msg.SequenceID] = nil
+		p.CurrentStateLock.Unlock()
 
-		LogStage("Commit", true, p.NodeID)
-		//fmt.Println("Testing Timestamp:", time.Now().Unix())
-		log.Info("Committed message: ", msg)
-		LogStage("Reply", true, p.NodeID)
+		// LogStage("Commit", true, p.NodeID)
+		log.Info("one commit")
+		fmt.Println("Testing Timestamp:", time.Now().Unix())
+		// log.Info("Committed message: ", msg)
+		// LogStage("Reply", true, p.NodeID)
 	}
 
 	return nil
@@ -342,7 +360,7 @@ func (state *State) Commit(commitMsg *tp.CommitMsg) (*tp.ReplyMsg, *tp.PbftReq, 
 	state.MsgLogs.CommitMsgs[commitMsg.NodeID] = commitMsg
 
 	// Print current voting status
-	fmt.Printf("[Commit-Vote]: %d\n", len(state.MsgLogs.CommitMsgs))
+	// fmt.Printf("[Commit-Vote]: %d\n", len(state.MsgLogs.CommitMsgs))
 
 	if state.committed() {
 		// This node executes the requested operation locally and gets the result.
@@ -360,7 +378,7 @@ func (state *State) Commit(commitMsg *tp.CommitMsg) (*tp.ReplyMsg, *tp.PbftReq, 
 		}, state.MsgLogs.ReqMsg, nil
 	}
 
-	return nil, nil, errors.New("[Commit] haven't received 2f+1 commit msg")
+	return nil, nil, errors.New("[Commit] haven't received 2f+1 commit msg yet")
 }
 
 func (p *Pbfter) createStateForNewConsensus(msgSeqID int64) (error, int64) {
@@ -383,7 +401,9 @@ func (p *Pbfter) createStateForNewConsensus(msgSeqID int64) (error, int64) {
 		seqID = msgSeqID
 	}
 
+	p.CurrentStateLock.Lock()
 	p.CurrentState[seqID] = createState(p.ViewID, lastSeqID)
+	p.CurrentStateLock.Unlock()
 
 	return nil, seqID
 }
@@ -518,9 +538,11 @@ func LogMsg(msg interface{}) {
 
 func LogStage(stage string, isDone bool, nodeID string) {
 	if isDone {
-		fmt.Printf("[STAGE-DONE] %s nodeID: %v\n", stage, nodeID)
+		log.Info(fmt.Sprintf("[STAGE-DONE] %s nodeID: %v\n", stage, nodeID))
+		// fmt.Printf("[STAGE-DONE] %s nodeID: %v\n", stage, nodeID)
 	} else {
-		fmt.Printf("[STAGE-BEGIN] %s nodeID: %v\n", stage, nodeID)
+		log.Info(fmt.Sprintf("[STAGE-BEGIN] %s nodeID: %v\n", stage, nodeID))
+		// fmt.Printf("[STAGE-BEGIN] %s nodeID: %v\n", stage, nodeID)
 	}
 }
 
