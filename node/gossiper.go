@@ -17,6 +17,7 @@ type Gossiper struct {
 
 	peers []string // known peers
 	peersLock sync.Mutex
+	clients map[string]pb.GossipClient
 
 	hashes map[string]bool // hashes of requests known
 	hashesLock sync.Mutex
@@ -98,19 +99,20 @@ func (g *Gossiper) GetAllRequests(ctx context.Context, void *pb.Void) (*pb.Reque
 func (g *Gossiper) sendGossip(neighborIp string, request []byte, c chan bool) {
 	reqHash := util.HashBytes(request)
 
-	conn, err := grpc.Dial(neighborIp, grpc.WithInsecure())
+	// conn, err := grpc.Dial(neighborIp, grpc.WithInsecure())
 	defer func(c chan bool) { <-c }(c)
-	if err != nil {
-		log.WithFields(log.Fields{
-			"ip": g.ip,
-			"peer": neighborIp,
-			"error": err,
-		}).Error("Cannot dial peer\n")
-		return
-	}
-	defer conn.Close()
+	// if err != nil {
+	// 	log.WithFields(log.Fields{
+	// 		"ip": g.ip,
+	// 		"peer": neighborIp,
+	// 		"error": err,
+	// 	}).Error("Cannot dial peer\n")
+	// 	return
+	// }
+	// defer conn.Close()
 
-	client := pb.NewGossipClient(conn)
+	// client := pb.NewGossipClient(g.connections[neighborIndex])
+	client := g.clients[neighborIp]
 
 	// ctx, cancel := context.WithTimeout(context.Background(), types.GRPC_TIMEOUT)
 	exists, err := client.Poke(context.Background(), &pb.ReqId{Hash: reqHash}, grpc.WaitForReady(true))
@@ -147,16 +149,31 @@ func (g *Gossiper) AddPeer(peerIp string) {
 	}
 
 	g.peers = append(g.peers, peerIp)
+
+	conn, err := grpc.Dial(peerIp, grpc.WithInsecure())
+	if err != nil {
+		log.WithFields(log.Fields{
+			"ip": g.ip,
+			"peer": peerIp,
+			"error": err,
+		}).Error("Cannot dial peer\n")
+		return
+	} else {
+		client := pb.NewGossipClient(conn)
+		g.clients[peerIp] = client
+	}
+
 	log.WithFields(log.Fields{
 		"ip": g.ip,
 		"peer": peerIp,
-	}).Info("Added peer\n")
+	}).Info("Added and connected to peer\n")
 }
 
 func CreateGossiper(ip string) *Gossiper {
 	newGossiper := new(Gossiper)
 	newGossiper.ip = ip
 	newGossiper.peers = make([]string, 0)
+	newGossiper.clients = make(map[string]pb.GossipClient)
 	newGossiper.hashes = make(map[string]bool)
 	newGossiper.poked = make(map[string]bool)
 	newGossiper.requests = make([]string, 0)

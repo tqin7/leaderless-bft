@@ -114,9 +114,15 @@ func testThroughPutSameConn(pbfters []string) {
 
 	mainClient := pb.NewPbftClient(mainConn)
 
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 3; i++ {
 		msgStr := fmt.Sprintf("%d %d %d", i, i, i)
 		reqBytes := constructPbftReqBytes(msgStr)
-		mainClient.GetReq(context.Background(), &pb.ReqBody{Body: reqBytes})
+		_, err := mainClient.GetReq(context.Background(), &pb.ReqBody{Body: reqBytes})
+		if err != nil {
+			log.Error("Client sendReq error!")
+			panic(err)
+		} else {
+			fmt.Printf("req %d done ", i)
+		}
 	}
 }

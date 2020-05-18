@@ -4,12 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	log "github.com/sirupsen/logrus"
 	pb "github.com/spockqin/leaderless-bft/proto"
 	"google.golang.org/grpc"
 	//"time"
-	// "google.golang.org/grpc/reflection"
+	// "google.golang.org/grpc/reflection"1
 	"net"
 	"sync"
 	tp "github.com/spockqin/leaderless-bft/types"
@@ -20,6 +19,7 @@ type Lbfter struct {
 	// Gossiper
 	Snower
 	Pbfter
+	// c chan int
 }
 
 func (l *Lbfter) LSendReq(ctx context.Context, request *pb.ReqBody) (*pb.Void, error) {
@@ -47,15 +47,27 @@ func (l *Lbfter) LSendReq(ctx context.Context, request *pb.ReqBody) (*pb.Void, e
 	if err != nil {
 		return &pb.Void{}, errors.New("[LSendReq] prePrepareMsg marshal error!")
 	} else {
-		fmt.Println("l Pbfter Push")
 		_, pushErr := l.Pbfter.Push(ctx, &pb.ReqBody{Body:prePrepareMsgBytes})
-		fmt.Println("Pushed")
 		if pushErr != nil {
 			panic(errors.New("[LSendReq] push prePrepareMsgBytes error!"))
 		}
 	}
 
 	LogStage("Pre-prepare", true, l.NodeID)
+
+	// for testing performance without pipeline
+	// var v int
+	// v = <-l.c
+	// log.WithFields(log.Fields{
+	// 		"v": v,
+	// 		"ip": l.Pbfter.ip,
+	// 	}).Info("received pbft commit signal")
+
+	//to block until entire network is done, give the same channel
+	//to all lbfters in lbftUp, then just use this
+	// for i := 0; i < len(l.Snower.allIps); i++ {
+	// 	v = <-l.c
+	// }
 
 	return &pb.Void{}, nil
 }
@@ -113,18 +125,12 @@ func (l *Lbfter) createLbftStateForNewConsensus(req *tp.PbftReq, msgSeqID int64)
 //}
 
 func CreateLbfter(nodeID string, viewID int64, ip string, allIps []string) *Lbfter {
+
+	// for testing performance without pipeline
+	// pipeC := make(chan int)
+
 	newLbfter := &Lbfter{
-		// Gossiper:      Gossiper{
-		// 	ip:           ip,
-		// 	peers:        make([]string, 0),
-		// 	peersLock:    sync.Mutex{},
-		// 	hashes:       make(map[string]bool),
-		// 	hashesLock:   sync.Mutex{},
-		// 	poked:        make(map[string]bool),
-		// 	pokedLock:    sync.Mutex{},
-		// 	requests:     make([]string, 0),
-		// 	requestsLock: sync.Mutex{},
-		// },
+		// c: pipeC,
 
 		Snower:		   Snower{
 			allIps:			  allIps,
@@ -169,6 +175,7 @@ func CreateLbfter(nodeID string, viewID int64, ip string, allIps []string) *Lbft
 				requests:     make([]string, 0),
 				requestsLock: sync.Mutex{},
 			},
+			// c: pipeC,
 		},
 	}
 

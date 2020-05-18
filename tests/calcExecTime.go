@@ -38,6 +38,7 @@ func main() {
 
 	fmt.Println("max time is: ", maxT)
 	fmt.Println("min time is: ", minT)
+	fmt.Println("number of matches: ", len(matches))
 	elapsedSeconds := maxT.Sub(minT).Seconds()
 	appendToFile("execTime.txt", fmt.Sprintf("%f seconds\n\n", elapsedSeconds))
 }

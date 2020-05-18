@@ -55,6 +55,7 @@ type Pbfter struct {
 	CommittedMsgs []*tp.PbftReq
 	MsgBuffer     *MsgBuffer
 	MsgDelivery   chan interface{}
+	// c chan int
 }
 
 const f = 1; //TODO: set f to (R-1)/3
@@ -95,6 +96,16 @@ func (p *Pbfter) GetReq(ctx context.Context, request *pb.ReqBody) (*pb.Void, err
 
 	// LogStage("Pre-prepare", true, p.NodeID)
 
+	// for testing performance without pipeline
+	// var v int
+	// if p.ip == "127.0.0.1:30000" {
+	// 		v = <-p.c
+	// 		log.WithFields(log.Fields{
+	// 				"v": v,
+	// 				"ip": p.ip,
+	// 			}).Info("received pbft commit signal")
+	// 	}
+	
 	return &pb.Void{}, nil
 }
 
@@ -325,7 +336,7 @@ func (p *Pbfter) GetCommit(msg *tp.CommitMsg) (error) {
 	p.CurrentStateLock.Unlock()
 	replyMsg, committedReq, err := state.Commit(msg)
 	if err != nil {
-		log.Info(err)
+		log.Error(err)
 	} 
 
 	if replyMsg != nil {
@@ -341,8 +352,24 @@ func (p *Pbfter) GetCommit(msg *tp.CommitMsg) (error) {
 		p.CurrentStateLock.Unlock()
 
 		// LogStage("Commit", true, p.NodeID)
-		log.Info("one commit")
+		log.WithFields(
+			log.Fields{
+				"ip": p.ip,
+				"req": msg.Digest,
+			}).Info("[pbft] commit")
 		fmt.Println("Testing Timestamp:", time.Now().Unix())
+
+		// for testing performance without pipeline
+		// if p.ip == "127.0.0.1:30000" {
+		// 	log.WithFields(log.Fields{
+		// 		"ip": p.ip,
+		// 	}).Info("signaling")
+		// 	p.c <- 7
+		// 	log.WithFields(log.Fields{
+		// 		"ip": p.ip,
+		// 	}).Info("signal received by other end")
+		// }
+		
 		// log.Info("Committed message: ", msg)
 		// LogStage("Reply", true, p.NodeID)
 	}
@@ -495,6 +522,7 @@ func CreatePbfter(nodeID string, viewID int64, ip string, allIps []string) *Pbft
 			CommitMsgs:     make([]*tp.CommitMsg, 0),
 		},
 		MsgDelivery:   make(chan interface{}),
+		// c: make(chan int),
 	}
 
 	return newPbfter

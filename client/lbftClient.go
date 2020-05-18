@@ -36,6 +36,10 @@ func main() {
 			"error": err,
 		}).Error("Cannot dial pbfter")
 		panic(err)
+	} else {
+		log.WithFields(log.Fields{
+			"node": mainIp,
+		}).Info("Connected to node")
 	}
 	defer mainConn.Close()
 
@@ -114,6 +118,29 @@ func main() {
 	}
 }
 
+func constructLbftReqBytes(msgStr string) []byte {
+	elements := strings.Split(msgStr,  " ")
+	timeStamp, err := strconv.ParseInt(elements[2], 10, 64)
+	if err != nil {
+		fmt.Printf("err happens when converting timestamp to int64")
+		panic(err)
+	}
+	req := &tp.PbftReq{
+		ClientID:  	elements[0],
+		Operation:  elements[1],
+		Timestamp:  timeStamp,
+		SequenceID: 0,
+		MsgType:    "PbftReq",
+	}
+
+	reqBytes, err := json.Marshal(req)
+	if err != nil {
+		log.Error("client marshal request error!")
+		panic(err)
+	}
+	return reqBytes
+}
+
 func testThroughPutSameConn(lbfters []string) {
 	// fmt.Println("Timestamp right before first dialing: ",
 	// 	time.Now().Format("2006-01-01 15:04:05 .000"))
@@ -128,8 +155,15 @@ func testThroughPutSameConn(lbfters []string) {
 
 	mainClient := pb.NewLbftClient(mainConn)
 
-	for i := 0; i < 100; i++ {
-		req := []byte(fmt.Sprintf("70 msg%d %d", i, i)) // 70 is dummy clientID
-		mainClient.LSendReq(context.Background(), &pb.ReqBody{Body: req})
+	for i := 0; i < 3; i++ {
+		msgStr := fmt.Sprintf("%d %d %d", i, i, i)
+		reqBytes := constructLbftReqBytes(msgStr)
+		_, err := mainClient.LSendReq(context.Background(), &pb.ReqBody{Body: reqBytes})
+		if err != nil {
+			log.Error("Client sendReq error!")
+			panic(err)
+		} else {
+			fmt.Printf("req %d done ", i)
+		}
 	}
 }

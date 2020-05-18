@@ -4,7 +4,7 @@ import "time"
 
 const (
 	SNOWBALL_SAMPLE_ROUNDS = 10
-	MAX_SOCKETS = 500
+	MAX_SOCKETS = 100000
 	GRPC_TIMEOUT = time.Second * 40
 	//GRPC_TIMEOUT = time.Nanosecond * 5
 )

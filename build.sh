@@ -31,6 +31,7 @@ echo 'Building go files...'
 env GOOS=linux GOARCH=amd64 go build -o ./build/gossipUp ./gossipUp.go
 	env GOOS=linux GOARCH=amd64 go build -o ./build/snowballUp ./snowballUp.go
 	env GOOS=linux GOARCH=amd64 go build -o ./build/pbftUp ./pbftUp.go
+	env GOOS=linux GOARCH=amd64 go build -o ./build/lbftUp ./lbftUp.go
 	# client files
 	env GOOS=linux GOARCH=amd64 go build -o ./build/clients/gossipClient ./client/gossipClient.go
 	env GOOS=linux GOARCH=amd64 go build -o ./build/clients/snowballClient ./client/snowballClient.go
@@ -47,6 +48,7 @@ env GOOS=linux GOARCH=amd64 go build -o ./build/gossipUp ./gossipUp.go
 # 	env GOOS=darwin GOARCH=amd64 go build -o ./build/gossipUp ./gossipUp.go
 # 	env GOOS=darwin GOARCH=amd64 go build -o ./build/snowballUp ./snowballUp.go
 # 	env GOOS=darwin GOARCH=amd64 go build -o ./build/pbftUp ./pbftUp.go
+# env GOOS=darwin GOARCH=amd64 go build -o ./build/lbftUp ./lbftUp.go
 # 	# client files
 # 	env GOOS=darwin GOARCH=amd64 go build -o ./build/clients/gossipClient ./client/gossipClient.go
 # 	env GOOS=darwin GOARCH=amd64 go build -o ./build/clients/snowballClient ./client/snowballClient.go

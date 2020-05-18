@@ -60,6 +60,11 @@ func (s *Snower) SendReq(ctx context.Context, req *pb.ReqBody) (*pb.Void, error)
 		s.performQueries(reqHashStr, &seqNumProposal)
 	}
 
+	log.WithFields(log.Fields{
+			"ip": s.ip,
+			"req": string(req.Body),
+		}).Info("[snowball] done with request")
+
 	return &pb.Void{}, nil
 }
 
@@ -88,7 +93,7 @@ func (s *Snower) performQueries(reqHashStr string, msg *pb.SeqNumMsg) {
 	log.WithFields(log.Fields{
 		"ip": s.ip,
 		"majority": finalSeqNum,
-	}).Info("Completed entire snowball query")
+	}).Info("[snowball] Completed entire snowball query")
 
 	s.finalSeqNumsLock.Lock()
 	s.finalSeqNums[reqHashStr] = finalSeqNum
@@ -129,11 +134,6 @@ func (s *Snower) getMajorityVote(reqHashStr string, msg *pb.SeqNumMsg, wg *sync.
 			}).Error("Cannot get vote\n")
 			continue
 		}
-		log.WithFields(log.Fields{
-			"ip": s.ip,
-			"from": ip,
-		}).Info("Got vote")
-		// fmt.Println("vote is: ", vote.SeqNum)
 		votes.IncreaseConfidence(vote.SeqNum)
 	}
 
