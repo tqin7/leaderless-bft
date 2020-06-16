@@ -11,12 +11,12 @@ import (
 	// "google.golang.org/grpc/reflection"1
 	"net"
 	"sync"
+	"time"
 	tp "github.com/spockqin/leaderless-bft/types"
 	util "github.com/spockqin/leaderless-bft/util"
 )
 
 type Lbfter struct {
-	// Gossiper
 	Snower
 	Pbfter
 	// c chan int
@@ -134,7 +134,7 @@ func CreateLbfter(nodeID string, viewID int64, ip string, allIps []string) *Lbft
 
 		Snower:		   Snower{
 			allIps:			  allIps,
-			confidences:	  make(map[string]ConfidenceMap),
+			confidences:	  make(map[string]*ConfidenceMap),
 			seqNum: 		  1,
 			finalSeqNums:     make(map[string]int64),
 			finalSeqNumsLock:  sync.Mutex{},
@@ -142,6 +142,7 @@ func CreateLbfter(nodeID string, viewID int64, ip string, allIps []string) *Lbft
 				ip:           ip,
 				peers:        make([]string, 0),
 				peersLock:    sync.Mutex{},
+				clients:      make(map[string]pb.GossipClient),
 				hashes:       make(map[string]bool),
 				hashesLock:   sync.Mutex{},
 				poked:        make(map[string]bool),
@@ -168,6 +169,7 @@ func CreateLbfter(nodeID string, viewID int64, ip string, allIps []string) *Lbft
 				ip:           ip,
 				peers:        make([]string, 0),
 				peersLock:    sync.Mutex{},
+				clients:      make(map[string]pb.GossipClient),
 				hashes:       make(map[string]bool),
 				hashesLock:   sync.Mutex{},
 				poked:        make(map[string]bool),
@@ -198,9 +200,24 @@ func (l *Lbfter) LbfterUp() {
 	pb.RegisterLbftServer(grpcServer, l)
 	// reflection.Register(grpcServer)
 
+	// for printing out throughput
+	if l.Pbfter.ip == "127.0.0.1:30000" {
+		go l.logThroughput()
+	}
+
 	if err := grpcServer.Serve(lis); err != nil {
 		log.WithField("ip", nodeIp).Error("Cannot serve [lbfter]")
 		panic(err)
+	}
+}
+
+func (l *Lbfter) logThroughput() {
+	for x := range time.Tick(2 * time.Second) { //every d seconds
+		log.WithFields(log.Fields{
+			"ip": l.Pbfter.ip,
+			"num": l.Pbfter.numCommitted,
+			"x": x,
+		}).Info("[lbft] number of msgs committed")
 	}
 }
 

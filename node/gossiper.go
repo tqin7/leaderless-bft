@@ -74,8 +74,6 @@ func (g *Gossiper) Push(ctx context.Context, reqBody *pb.ReqBody) (*pb.Void, err
 	// 	"request": string(reqBody.Body),
 	// }).Info("stored new request")
 
-	// each connection opens a socket
-	// to check # of max sockets open at once, run "ulimit -n"
 	maxSoc := make(chan bool, types.MAX_SOCKETS)
 	for _, peerIp := range g.peers {
 		maxSoc <- true // blocks if maxSoc is full

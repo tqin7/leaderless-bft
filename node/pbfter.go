@@ -55,6 +55,7 @@ type Pbfter struct {
 	CommittedMsgs []*tp.PbftReq
 	MsgBuffer     *MsgBuffer
 	MsgDelivery   chan interface{}
+	numCommitted int
 	// c chan int
 }
 
@@ -247,6 +248,10 @@ func (p *Pbfter) GetPrePrepare(msg *tp.PrePrepareMsg) (error) {
 }
 
 func (state *State) PrePrepare(prePrepareMsg *tp.PrePrepareMsg) (*tp.PrepareMsg, error) {
+	if state == nil {
+		return nil, nil
+	}
+
 	// Get ReqMsgs and save it to its logs like the primary.
 	state.MsgLogs.ReqMsg = prePrepareMsg.Req
 
@@ -273,10 +278,10 @@ func (p *Pbfter) GetPrepare(msg *tp.PrepareMsg) (error) {
 	p.CurrentStateLock.Lock()
 	state := p.CurrentState[msg.SequenceID]
 	p.CurrentStateLock.Unlock()
-	commitMsg, err := state.Prepare(msg)
-	if err != nil {
-		log.Info(err)
-	}
+	commitMsg, _ := state.Prepare(msg)
+	// if err != nil {
+	// 	log.Info(err)
+	// }
 
 	if commitMsg != nil {
 		commitMsg.NodeID = p.NodeID
@@ -301,6 +306,10 @@ func (p *Pbfter) GetPrepare(msg *tp.PrepareMsg) (error) {
 }
 
 func (state *State) Prepare(prepareMsg *tp.PrepareMsg) (*tp.CommitMsg, error)  {
+	if state == nil {
+		return nil, nil
+	}
+
 	if !state.verifyMsg(prepareMsg.ViewID, prepareMsg.SequenceID, prepareMsg.Digest) {
 		log.Error("prepare message is corrupted")
 		panic("prepare message is corrupted")
@@ -334,10 +343,10 @@ func (p *Pbfter) GetCommit(msg *tp.CommitMsg) (error) {
 	p.CurrentStateLock.Lock()
 	state := p.CurrentState[msg.SequenceID]
 	p.CurrentStateLock.Unlock()
-	replyMsg, committedReq, err := state.Commit(msg)
-	if err != nil {
-		log.Error(err)
-	} 
+	replyMsg, committedReq, _ := state.Commit(msg)
+	// if err != nil {
+	// 	log.Info(err)
+	// } 
 
 	if replyMsg != nil {
 		if committedReq == nil {
@@ -352,11 +361,13 @@ func (p *Pbfter) GetCommit(msg *tp.CommitMsg) (error) {
 		p.CurrentStateLock.Unlock()
 
 		// LogStage("Commit", true, p.NodeID)
-		log.WithFields(
-			log.Fields{
-				"ip": p.ip,
-				"req": msg.Digest,
-			}).Info("[pbft] commit")
+		p.numCommitted += 1
+
+		// log.WithFields(
+		// 	log.Fields{
+		// 		"ip": p.ip,
+		// 		"req": msg.Digest,
+		// 	}).Info("[pbft] commit")
 		fmt.Println("Testing Timestamp:", time.Now().Unix())
 
 		// for testing performance without pipeline
@@ -378,6 +389,10 @@ func (p *Pbfter) GetCommit(msg *tp.CommitMsg) (error) {
 }
 
 func (state *State) Commit(commitMsg *tp.CommitMsg) (*tp.ReplyMsg, *tp.PbftReq, error) {
+	if state == nil {
+		return nil, nil, nil
+	}
+
 	if !state.verifyMsg(commitMsg.ViewID, commitMsg.SequenceID, commitMsg.Digest) {
 		log.Error("commit message is corrupted")
 		panic("commit message is corrupted")
@@ -504,6 +519,7 @@ func CreatePbfter(nodeID string, viewID int64, ip string, allIps []string) *Pbft
 			ip:           ip,
 			peers:        make([]string, 0),
 			peersLock:    sync.Mutex{},
+			clients:      make(map[string]pb.GossipClient),
 			hashes:       make(map[string]bool),
 			hashesLock:   sync.Mutex{},
 			poked:        make(map[string]bool),
@@ -523,6 +539,7 @@ func CreatePbfter(nodeID string, viewID int64, ip string, allIps []string) *Pbft
 		},
 		MsgDelivery:   make(chan interface{}),
 		// c: make(chan int),
+		numCommitted: 0,
 	}
 
 	return newPbfter
@@ -541,9 +558,24 @@ func (p *Pbfter) PbfterUp() {
 	pb.RegisterPbftServer(grpcServer, p)
 	// reflection.Register(grpcServer)
 
+	// for printing out throughput
+	if p.ip == "127.0.0.1:30000" {
+		go p.logThroughput()
+	}
+
 	if err := grpcServer.Serve(lis); err != nil {
 		log.WithField("ip", p.ip).Error("Cannot serve [pbfter]")
 		panic(err)
+	}
+}
+
+func (p *Pbfter) logThroughput() {
+	for x := range time.Tick(2 * time.Second) { //every 30 seconds
+		log.WithFields(log.Fields{
+			"ip": p.ip,
+			"num": p.numCommitted,
+			"x": x,
+		}).Info("[pbft] number of msgs committed")
 	}
 }
 

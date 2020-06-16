@@ -18,7 +18,16 @@ parser.add_argument("size", help="size of network", type=int, default=10)
 
 args = parser.parse_args()
 numOfNodes = args.size
-maxNeighborSize = int(math.floor(math.sqrt(numOfNodes)))
+# 2 to deal with max sockets allowed in testing environment
+maxNeighborSize = 2
+# if numOfNodes >= 160 and numOfNodes < 320:
+#     maxNeighborSize = 2
+# elif numOfNodes <= 400:
+#     maxNeighborSize = 2
+# elif numOfNodes <= 500:
+#     maxNeighborSize = 2
+# else:
+#     maxNeighborSize = int(math.floor(math.sqrt(numOfNodes)))
 
 addrs = []
 port = 29999

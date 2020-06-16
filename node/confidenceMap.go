@@ -1,16 +1,17 @@
 package proto
 
 import "sync"
+import "fmt"
 
 type ConfidenceMap struct {
 	lock sync.Mutex
 	kvMap map[int64]uint
 }
 
-func CreateConfidenceMap() ConfidenceMap {
+func CreateConfidenceMap() *ConfidenceMap {
 	m := ConfidenceMap{}
 	m.kvMap = make(map[int64]uint)
-	return m
+	return &m
 }
 
 func (m *ConfidenceMap) Size() int {
@@ -32,6 +33,8 @@ func (m *ConfidenceMap) RemoveKey(k int64) {
 }
 
 func (m *ConfidenceMap) IncreaseConfidence(k int64) {
+	fmt.Println("map increase")
+	fmt.Println(m)
 	m.lock.Lock()
 	defer m.lock.Unlock()
 

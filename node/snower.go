@@ -18,7 +18,7 @@ type Snower struct {
 	Gossiper
 	allIps []string // ip of every node in the network
 	//confidences ConfidenceMap // storing num of queries that yield each output
-	confidences map[string]ConfidenceMap
+	confidences map[string]*ConfidenceMap
 	seqNum int64 // current sequence number, non-decreasing
 	finalSeqNums map[string]int64 // map request hashes (stringified) to their final sequence numbers
 	finalSeqNumsLock sync.Mutex
@@ -60,10 +60,10 @@ func (s *Snower) SendReq(ctx context.Context, req *pb.ReqBody) (*pb.Void, error)
 		s.performQueries(reqHashStr, &seqNumProposal)
 	}
 
-	log.WithFields(log.Fields{
-			"ip": s.ip,
-			"req": string(req.Body),
-		}).Info("[snowball] done with request")
+	// log.WithFields(log.Fields{
+	// 		"ip": s.ip,
+	// 		"req": string(req.Body),
+	// 	}).Info("[snowball] done with request")
 
 	return &pb.Void{}, nil
 }
@@ -82,18 +82,18 @@ func (s *Snower) performQueries(reqHashStr string, msg *pb.SeqNumMsg) {
 
 	reqConfidenceMap := s.confidences[reqHashStr]
 	if reqConfidenceMap.Size() == 0 {
-		log.WithFields(log.Fields{
-			"ip": s.ip,
-		}).Info("Not able to obtain any snowball vote")
+		// log.WithFields(log.Fields{
+		// 	"ip": s.ip,
+		// }).Info("Not able to obtain any snowball vote")
 		return
 	}
 
 	finalSeqNum, _ := reqConfidenceMap.GetKeyWithMostConfidence()
 
-	log.WithFields(log.Fields{
-		"ip": s.ip,
-		"majority": finalSeqNum,
-	}).Info("[snowball] Completed entire snowball query")
+	// log.WithFields(log.Fields{
+	// 	"ip": s.ip,
+	// 	"majority": finalSeqNum,
+	// }).Info("[snowball] Completed entire snowball query")
 
 	s.finalSeqNumsLock.Lock()
 	s.finalSeqNums[reqHashStr] = finalSeqNum
@@ -115,11 +115,11 @@ func (s *Snower) getMajorityVote(reqHashStr string, msg *pb.SeqNumMsg, wg *sync.
 	for _, ip := range networkSubset {
 		conn, err := grpc.Dial(ip, grpc.WithInsecure())
 		if err != nil {
-			log.WithFields(log.Fields{
-				"ip": s.ip,
-				"node": ip,
-				"error": err,
-			}).Error("Cannot dial node\n")
+			// log.WithFields(log.Fields{
+			// 	"ip": s.ip,
+			// 	"node": ip,
+			// 	"error": err,
+			// }).Error("Cannot dial node\n")
 			continue
 		}
 		client := pb.NewSnowballClient(conn)
@@ -127,11 +127,11 @@ func (s *Snower) getMajorityVote(reqHashStr string, msg *pb.SeqNumMsg, wg *sync.
 		//CallOption "grpc.WaitForReady(true)" elminates "TransientFailure error" but gets stuck
 		conn.Close()
 		if err != nil {
-			log.WithFields(log.Fields{
-				"ip": s.ip,
-				"node": ip,
-				"error": err,
-			}).Error("Cannot get vote\n")
+			// log.WithFields(log.Fields{
+			// 	"ip": s.ip,
+			// 	"node": ip,
+			// 	"error": err,
+			// }).Error("Cannot get vote\n")
 			continue
 		}
 		votes.IncreaseConfidence(vote.SeqNum)
@@ -163,7 +163,7 @@ func CreateSnower(ip string, allIps []string) *Snower {
 	newSnower.requests = make([]string, 0)
 
 	newSnower.allIps = allIps
-	newSnower.confidences = make(map[string]ConfidenceMap)
+	newSnower.confidences = make(map[string]*ConfidenceMap)
 	newSnower.seqNum = -1
 	newSnower.finalSeqNums = make(map[string]int64)
 

@@ -4,7 +4,8 @@ import "time"
 
 const (
 	SNOWBALL_SAMPLE_ROUNDS = 10
-	MAX_SOCKETS = 100000
+	// to check # of max sockets open at once, run "ulimit -n"
+	MAX_SOCKETS = 10000
 	GRPC_TIMEOUT = time.Second * 40
 	//GRPC_TIMEOUT = time.Nanosecond * 5
 )

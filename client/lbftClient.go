@@ -45,6 +45,7 @@ func main() {
 
 	mainClient := pb.NewLbftClient(mainConn)
 	numPattern, _ := regexp.Compile("get num (.+)")
+	// throughputPattern, _ := regexp.Compile("throughput (.+)")
 
 	for {
 		// read in input from stdin
@@ -86,7 +87,9 @@ func main() {
 				fmt.Println(ip, "-", seqNumRes.SeqNum)
 				conn.Close()
 			}
-		case msgStr == "throughput same":
+		case msgStr == "latency same":
+			testLatencySameConn(lbfters)
+		case msgStr == "throughput":
 			testThroughPutSameConn(lbfters)
 		default:
 			elements := strings.Split(msgStr,  " ")
@@ -141,7 +144,7 @@ func constructLbftReqBytes(msgStr string) []byte {
 	return reqBytes
 }
 
-func testThroughPutSameConn(lbfters []string) {
+func testLatencySameConn(lbfters []string) {
 	// fmt.Println("Timestamp right before first dialing: ",
 	// 	time.Now().Format("2006-01-01 15:04:05 .000"))
 
@@ -167,3 +170,31 @@ func testThroughPutSameConn(lbfters []string) {
 		}
 	}
 }
+
+func testThroughPutSameConn(lbfters []string) {
+	mainIp := lbfters[0]
+	mainConn, err := grpc.Dial(mainIp, grpc.WithInsecure())
+	if err != nil {
+		fmt.Println("Cannot establish TCP connection with lbfter")
+		return
+	}
+	defer mainConn.Close()
+
+	mainClient := pb.NewLbftClient(mainConn)
+
+	i := 0
+
+	for {
+		msgStr := fmt.Sprintf("%d %d %d", i, i, i)
+		reqBytes := constructLbftReqBytes(msgStr)
+		_, err := mainClient.LSendReq(context.Background(), &pb.ReqBody{Body: reqBytes})
+		if err != nil {
+			log.Error("Client sendReq error!")
+			panic(err)
+		} else {
+			fmt.Printf("req %d done ", i)
+		}
+		i += 1
+	}
+}
+
