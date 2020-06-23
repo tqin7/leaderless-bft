@@ -1,4 +1,4 @@
-package main
+.package main
 
 import (
 	"bufio"
@@ -68,9 +68,9 @@ func main() {
 				fmt.Println(ip, "-", requests.Requests)
 				conn.Close()
 			}
-		case msgStr == "throughput same":
+		case msgStr == "latency same":
 			testThroughPutSameConn(gossipers)
-		case msgStr == "throughput random":
+		case msgStr == "latency random":
 			testThroughPutRandomConn(gossipers)
 		default:
 			hash := util.HashBytes([]byte(msgStr))

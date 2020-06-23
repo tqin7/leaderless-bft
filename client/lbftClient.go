@@ -158,7 +158,7 @@ func testLatencySameConn(lbfters []string) {
 
 	mainClient := pb.NewLbftClient(mainConn)
 
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 100; i++ {
 		msgStr := fmt.Sprintf("%d %d %d", i, i, i)
 		reqBytes := constructLbftReqBytes(msgStr)
 		_, err := mainClient.LSendReq(context.Background(), &pb.ReqBody{Body: reqBytes})

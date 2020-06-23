@@ -116,7 +116,7 @@ func testLatencySameConn(pbfters []string) {
 
 	mainClient := pb.NewPbftClient(mainConn)
 
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 100; i++ {
 		msgStr := fmt.Sprintf("%d %d %d", i, i, i)
 		reqBytes := constructPbftReqBytes(msgStr)
 		_, err := mainClient.GetReq(context.Background(), &pb.ReqBody{Body: reqBytes})

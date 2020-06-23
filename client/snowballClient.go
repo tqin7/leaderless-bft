@@ -79,7 +79,7 @@ func main() {
 				fmt.Println(ip, "-", seqNumRes.SeqNum)
 				conn.Close()
 			}
-		case msgStr == "throughput same":
+		case msgStr == "latency same":
 			testThroughPutSameConn(snowers)
 		default:
 			mainClient.SendReq(context.Background(), &pb.ReqBody{Body: msg})
