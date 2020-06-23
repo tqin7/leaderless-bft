@@ -1,6 +1,0 @@
-# pack-refs with: peeled fully-peeled sorted 
-8855a65a43fdf359cfb4b33fa15dda7d2bf76da1 refs/heads/master
-fd6c0375be1ed1a37364cff716f515c9c2a7c9dc refs/heads/pbft
-8314c3cf381dbaf3c463fc9c9bb2612838d38236 refs/heads/pbft-Nov
-f189471d3970b62d790629f3ecde45fb213252df refs/heads/pipeline
-d6e3b46ff7de87379d46d672d1af747cc9b58b67 refs/heads/snowball-refactor
