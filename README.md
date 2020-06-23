@@ -3,6 +3,7 @@
 2. [Instructions](##Instructions)
 3. [Techincal Implementation](##Technical-Implementation)
 4. [Directory Overview](##Directory-Overview)
+5. [Testing Guide](##Testing-Guide)
 
 ## Project Overview
 Leaderless Byzantine Fault Tolerance is a new blockchain consensus algorithm (also applicable to general distributed systems) that tolerates Byzantine faults while being leaderless and deterministic. It's based upon pBFT (practical Byzantine Fault Tolerance) and Snowball. 
@@ -58,3 +59,22 @@ The main programming language is Go. The peer-to-peer communication layer implem
 `gossipUp.go`: bring up the gossip layer according to the generated network configuration
 
 `snowballUp.go`: bring up the snowball layer according to the generated network configuration
+
+## Testing Guide
+`./build.sh` generates a `build` folder that contains all files necessary for testing. Specifically, this shell script
+* generates network configuration
+* generates protobuf file(s)
+* builds Go files
+* sets up testing framework
+
+Testing of our system consists of two steps: 
+   1. spinning up the network
+   2. interacting with the network through client endpoints
+
+For step 1, change directory to `./build/tests`. Run the command `./runNetwork.sh [networkType] [networkSize]` where
+* `networkType` specifies node type and can be any of the four: `gossipUp`, `snowballUp`, `pbftUp`, `lbftUp`
+* `networkSize` is an integer that specifies the number of nodes in the network and can be for example 50, 232, etc.
+
+For step 2, change directory to `./build/clients`. Run the corresponding client endpoint: for example, if in the previous step, `snowballUp` is chosen, run `./snowballClient` in this step. Then you can easily send requests to the network through a command line interface. To test for latency, send `latency same` through the interface and to test for throughput (only available for pbft and lbft), send `throughput` through the interface.
+
+During testing, standard output logs will be logged in file `./build/tests/log.txt` and to calculate total execution time, change directory to `/build/tests ` and run `./calcExecTime log.txt`, which will output total execution time to `./build/tests/execTime.txt`.
